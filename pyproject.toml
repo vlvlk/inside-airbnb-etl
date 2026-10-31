@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "airbnb-occupancy-pipeline"
+version = "0.1.0"
+description = "ETL pipeline for Airbnb occupancy analytics"
+readme = "README.md"
+requires-python = "==3.12.14"
+dependencies = [
+    "pandas==3.1.0",
+    "pydantic==2.14.2",
+    "pydantic-settings==2.16.2",
+    "sqlalchemy==2.1.6",
+    "psycopg2-binary==2.9.13",
+    "PyYAML==6.0.3",
+    "python-dotenv==1.2.4",
+    # Dashboard: Streamlit bundles Altair, so no separate chart dependency.
+    "streamlit>=1.57",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "pytest-cov==7.1.0",
+    "ruff==0.17.3",
+    "pyright==1.1.414",
+]
+
+# src-layout: the importable package is ``src`` (imports are ``from src...``),
+# so the project root must be on sys.path. Restrict discovery to ``src*`` so
+# the ``tests`` package is not installed as a top-level package.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+include = ["src", "tests"]
+exclude = [".venv", "data", "**/__pycache__"]
+
+# Tests feed raw CSV-like strings (e.g. {"id": "12345"}) into Pydantic models
+# on purpose: coercion is done by ``mode="before"`` validators at runtime.
+# Pyright synthesises strict ``__init__`` signatures from the field annotations
+# via pydantic's ``@dataclass_transform`` and cannot see those validators, so
+# the resulting reportArgumentType/reportCallIssue noise is suppressed here
+# while ``src`` stays fully checked.
+[[tool.pyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["."]
+reportArgumentType = "none"
+reportCallIssue = "none"
+
+[tool.ruff]
+# Pin the rule set explicitly so ``ruff check`` is deterministic across ruff
+# versions instead of silently following the tool's default selection.
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "BLE", "SIM"]

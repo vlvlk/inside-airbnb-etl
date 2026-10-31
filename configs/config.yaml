@@ -1,0 +1,33 @@
+# Airbnb Occupancy Pipeline Configuration
+#
+# This is the primary declarative configuration file: edit values here.
+# Precedence (highest first): CLI/init args > environment variables > .env > this file > code defaults.
+# Unknown keys are rejected with an error, so typos surface immediately.
+
+database:
+  host: localhost
+  port: 5432
+  name: airbnb
+  user: airbnb
+  password: airbnb
+
+data:
+  # Single root directory; raw/ and processed/ sub-paths are derived from it.
+  data_path: ./data
+  listings_file: listings.csv
+  calendar_file: calendar.csv
+
+pipeline:
+  # Rows handed to the loader per COPY/INSERT (bounded memory per batch).
+  batch_size: 100000
+  # Rows read from CSV per pandas pass (larger = fewer pandas calls).
+  chunk_size: 250000
+  validate_data: true
+  skip_invalid_rows: false
+  # Use COPY FROM STDIN for raw loads; set false to fall back to row-wise
+  # INSERT ... ON CONFLICT (slower, but works without COPY privileges).
+  use_copy: true
+
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

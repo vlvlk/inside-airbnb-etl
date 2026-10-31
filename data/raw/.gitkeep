@@ -1,0 +1,2 @@
+# Keeps the data/raw/ directory in version control.
+# Raw CSV datasets (listings.csv, calendar.csv) are git-ignored — see .gitignore.

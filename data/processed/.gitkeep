@@ -1,0 +1,2 @@
+# Keeps the data/processed/ directory in version control.
+# Generated artifacts are git-ignored — see .gitignore.
