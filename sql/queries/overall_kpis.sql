@@ -47,6 +47,11 @@ rev AS (
     FROM marts.revenue_by_listing
     GROUP BY year, month, quarter
 )
+-- NOTE: the occupancy and revenue aggregates do not cover the same listings.
+-- ``occ`` counts every listing with calendar data; ``rev`` only counts listings
+-- that carry a price. ADR and RevPAR must therefore be computed from the
+-- revenue side's own night counts (``rev_booked_nights`` / ``rev_available_nights``),
+-- never from the occupancy side's, or the ratio silently mixes two populations.
 SELECT
     o.year,
     o.month,
@@ -60,10 +65,19 @@ SELECT
     o.occupancy_rate,
     r.total_revenue,
     r.avg_daily_rate,
-    r.revenue_per_available_night
+    r.revenue_per_available_night,
+    -- Night counts from the revenue side, so callers can recompute ADR/RevPAR
+    -- over the priced subset instead of dividing by the occupancy population.
+    r.booked_nights AS rev_booked_nights,
+    r.available_nights AS rev_available_nights
 FROM occ o
+-- ``marts.revenue_by_listing`` has no ``week_of_year`` column, so weekly rows
+-- have no revenue counterpart. Joining them on (year, month, quarter) would
+-- silently attach the *quarterly* revenue to each week; the guard below keeps
+-- weekly revenue NULL instead, so an absent figure never reads as a real one.
 LEFT JOIN rev r
-    ON r.year = o.year
+    ON o.granularity <> 'week'
+   AND r.year = o.year
    AND r.month IS NOT DISTINCT FROM o.month
    AND r.quarter IS NOT DISTINCT FROM o.quarter
 ORDER BY o.year, o.month NULLS LAST, o.week_of_year NULLS LAST, o.quarter NULLS LAST;

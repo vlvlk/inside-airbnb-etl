@@ -15,10 +15,12 @@ QUERY_CATALOGUE: dict[str, str] = {
     "occupancy_by_room_type": "Occupancy by room type",
     "occupancy_by_listing": "Occupancy by listing",
     "revenue_by_listing": "Revenue by listing (ADR, RevPAR)",
+    "host_segmentation": "Host segmentation (single vs professional)",
     "top_listings_by_revpar": "Top listings by RevPAR",
     "seasonality": "Seasonality by month",
     "neighbourhood_ranking": "Neighbourhood ranking per year",
     "price_vs_occupancy": "Price vs. occupancy",
+    "data_quality": "Data quality checks",
 }
 
 with st.sidebar:
@@ -43,7 +45,7 @@ with st.container(border=True):
     st.subheader(QUERY_CATALOGUE[query_name])
     st.caption(f"{len(df):,} rows returned; showing the first {limit:,}.")
     st.dataframe(
-        df.head(limit),
+        ui.stringify_ids(df.head(limit)),
         hide_index=True,
         column_config=ui.occupancy_column_config(),
         alt=f"Result of the {QUERY_CATALOGUE[query_name]} query",

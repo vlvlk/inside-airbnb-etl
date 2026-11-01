@@ -1,6 +1,50 @@
 # Airbnb Occupancy Analytics Pipeline
 
-ETL pipeline for processing Airbnb listings and calendar data to calculate occupancy rates and revenue metrics.
+An end-to-end analytics project over the Inside Airbnb snapshot for **Toronto,
+Canada (2026-09-17 → 2027-09-17)**: a SQL ETL pipeline loads 22,050 listings and
+8.0M calendar nights into PostgreSQL, and a Streamlit dashboard turns them into
+occupancy and revenue insights.
+
+## TL;DR
+
+**The question.** What actually drives occupancy in the Toronto short-term rental
+market, and what should a host do about it?
+
+**The five findings** (each is recomputed from the data and shown with its chart
+on the [Insights](#dashboard-streamlit) page):
+
+1. **Demand is strongly seasonal.** Occupancy runs from **37.8%** in February to
+   **63.2%** in September — a 25-point swing across the year.
+2. **Single-listing hosts beat professionals.** Hosts with one listing fill
+   **54.3%** of nights at **$294** ADR; hosts with five or more fill **37.1%** at
+   **$174**. Scale does not buy occupancy here.
+3. **Whole homes earn a large premium.** Entire homes fill **48.8%** at
+   **$296**/night; private rooms fill **44.7%** at **$117**/night. The price gap
+   (2.5x) is far wider than the occupancy gap.
+4. **Higher prices do not buy higher occupancy.** The price↔occupancy correlation
+   is **−0.23** across room types and months — flat to negative.
+5. **Location is the biggest lever.** The best neighbourhood fills **67.6%** of
+   nights, the worst **22.8%** — a 45-point spread inside one city.
+
+**The caveats** (measured, not hand-waved — see [`docs/methodology.md`](docs/methodology.md:1)):
+
+- **Occupancy is an upper bound.** "Unavailable" ≠ "booked": hosts also block
+  nights by hand. This pipeline reports 47.4%; Inside Airbnb's own estimate is
+  19.9%, and the two correlate at −0.02. Treat 47.4% as a ceiling.
+- **Revenue is estimated from a static price.** The calendar snapshot has no
+  per-night price, so every night is valued at the listing's single scraped
+  price (visible as a flat $201.88 across all months). Read `total_revenue` as an
+  upper-bound estimate.
+- **Two "average prices" coexist.** `avg_price_per_night` (all nights) and ADR
+  (booked nights only) are different quantities and are not interchangeable.
+- **The staging layer keeps stale rows.** 15,382 listings from earlier snapshots
+  survive the upsert; they never reach a metric (the marts join through the
+  calendar) but they inflate any direct read of `staging.listings`.
+- **The revenue marts cover a subset.** 7,634 listings carry no price and are
+  excluded from ADR/RevPAR.
+
+The [Data quality](#dashboard-streamlit) page surfaces every one of these counts
+on each run.
 
 ## Architecture
 
@@ -55,9 +99,16 @@ Measured on the bundled dataset (8.0M calendar rows, 330 MB of CSV):
 
 ### Key Metrics
 
-- **Occupancy Rate** = `booked_nights / total_nights` (a fraction in `[0, 1]`)
+- **Occupancy Rate** = `booked_nights / total_nights` (a fraction in `[0, 1]`).
+  `booked_nights` counts every night flagged unavailable, so this is an upper
+  bound — see [`docs/methodology.md`](docs/methodology.md:1).
 - **ADR (Average Daily Rate)** = Average price per booked night
 - **RevPAR (Revenue Per Available Room)** = Total revenue / available nights
+
+Revenue is estimated from each listing's single scraped price (the calendar
+snapshot carries no per-night price), so ADR, RevPAR and total revenue are
+estimates over the priced subset of listings. The measured size of each gap is in
+[`docs/methodology.md`](docs/methodology.md:1).
 
 Calculated at multiple granularities:
 
@@ -91,6 +142,20 @@ the ETL step, start the `app` service on its own:
 ```bash
 docker-compose -f docker/docker-compose.yml up --build app
 ```
+
+> **Restarting the dashboard re-runs the whole ETL.** `docker compose up
+> dashboard` also starts the `app` dependency, and the dashboard waits for it
+> with `condition: service_completed_successfully`. Compose therefore reloads all
+> 8.0M calendar rows (~7 minutes) before the dashboard comes back, which looks
+> like a hang but is a full reload. When the mart data is already loaded and only
+> the dashboard code changed, skip the dependency:
+>
+> ```bash
+> docker compose -f docker/docker-compose.yml up -d --no-deps --build dashboard
+> ```
+>
+> This rebuilds and restarts only the dashboard container and leaves the loaded
+> database untouched.
 
 ### Local Development
 
@@ -220,6 +285,8 @@ airbnb-occupancy-pipeline/
 │   └── .env.example         # Environment variables template
 ├── data/
 │   └── raw/                 # Bundled Toronto snapshot (Parquet, committed)
+├── docs/
+│   └── methodology.md       # Metric definitions and measured limitations
 ├── scripts/
 │   └── csv_to_parquet.py    # Rebuild the artifacts from csv.gz downloads
 ├── docker/
@@ -248,7 +315,7 @@ airbnb-occupancy-pipeline/
 │   │   ├── app.py           # Dashboard entry point (st.navigation)
 │   │   ├── data.py          # Cached DB access + granularity helpers
 │   │   ├── ui.py            # Sidebar filters, formatting, Altair charts
-│   │   └── app_pages/       # Overview, Occupancy, Revenue, SQL explorer
+│   │   └── app_pages/       # Insights, Overview, Occupancy, Revenue, Data quality, SQL explorer
 │   └── pipeline.py          # Main ETL orchestration
 ├── .streamlit/
 │   └── config.toml          # Dashboard theme (light/dark)
@@ -333,15 +400,21 @@ Pages:
 
 | Page | Contents |
 | ------ | ---------- |
+| **Insights** (default) | The five headline findings, each with its chart, plus recommendations and the caveats behind the numbers |
 | **Overview** | Portfolio KPIs (listings, occupancy, ADR, revenue), occupancy/ADR/RevPAR trends, seasonality by month, period detail table |
 | **Occupancy** | Neighbourhood and room-type rankings, price-vs-occupancy scatter, neighbourhood leaderboard |
 | **Revenue** | ADR/RevPAR trend, top listings by RevPAR, revenue KPIs |
+| **Data quality** | Layer counts and data quality checks (ghost listings, missing prices, dropped rows) with an explanation of each |
 | **SQL explorer** | Runs any saved query and shows the SQL for copy-paste into `psql` |
 
 The dashboard reads the pre-aggregated marts only (never the raw layer), caches
 query results with `@st.cache_data`, and keeps a single connection pool per
-process via `@st.cache_resource`. The theme lives in
+process via `@st.cache_resource`. The Data quality page reads the raw and staging
+layers on purpose — a quality check has to compare layers. The theme lives in
 [`.streamlit/config.toml`](.streamlit/config.toml:1).
+
+The assumptions behind every metric, with the measured size of each error, are
+written up in [`docs/methodology.md`](docs/methodology.md:1).
 
 ### Reusable SQL queries
 
@@ -356,10 +429,12 @@ run by hand:
 | [`occupancy_by_room_type.sql`](sql/queries/occupancy_by_room_type.sql:1) | Occupancy and price per room type |
 | [`occupancy_by_listing.sql`](sql/queries/occupancy_by_listing.sql:1) | Occupancy per listing |
 | [`revenue_by_listing.sql`](sql/queries/revenue_by_listing.sql:1) | ADR, RevPAR, revenue per listing |
+| [`host_segmentation.sql`](sql/queries/host_segmentation.sql:1) | Occupancy, ADR and RevPAR by host portfolio size (single vs professional) |
 | [`top_listings_by_revpar.sql`](sql/queries/top_listings_by_revpar.sql:1) | Top listings by RevPAR per month (window ranking) |
 | [`seasonality.sql`](sql/queries/seasonality.sql:1) | Occupancy collapsed by calendar month |
 | [`neighbourhood_ranking.sql`](sql/queries/neighbourhood_ranking.sql:1) | Neighbourhood leaderboard per year |
 | [`price_vs_occupancy.sql`](sql/queries/price_vs_occupancy.sql:1) | Price vs. occupancy by room type and month |
+| [`data_quality.sql`](sql/queries/data_quality.sql:1) | Layer counts and data quality checks (ghosts, missing prices, dropped rows) |
 
 Run one directly:
 

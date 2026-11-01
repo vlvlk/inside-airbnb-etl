@@ -101,7 +101,7 @@ with st.container(border=True):
         ui.render_empty_state("No ranked listings for the current filters.")
     else:
         st.dataframe(
-            top,
+            ui.stringify_ids(top),
             hide_index=True,
             column_config={
                 **ui.occupancy_column_config(),

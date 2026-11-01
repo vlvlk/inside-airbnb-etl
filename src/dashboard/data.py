@@ -108,6 +108,16 @@ def load_price_vs_occupancy() -> pd.DataFrame:
     return run_query("price_vs_occupancy")
 
 
+def load_host_segmentation() -> pd.DataFrame:
+    """Occupancy, price and revenue by host portfolio size."""
+    return run_query("host_segmentation")
+
+
+def load_data_quality() -> pd.DataFrame:
+    """Layer counts and data quality checks (reads raw, staging and marts)."""
+    return run_query("data_quality")
+
+
 # ---------------------------------------------------------------------------
 # Granularity helpers
 # ---------------------------------------------------------------------------

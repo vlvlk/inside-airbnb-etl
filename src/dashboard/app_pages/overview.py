@@ -27,16 +27,28 @@ period_rows = data.add_period(period_rows).sort_values("period")
 # KPI row
 # ---------------------------------------------------------------------------
 
-total_listings = int(kpis["total_listings"].max()) if not kpis.empty else 0
-total_nights = int(kpis["total_nights"].sum())
-booked_nights = int(kpis["booked_nights"].sum())
-occupancy = booked_nights / total_nights if total_nights else None
-total_revenue = float(kpis["total_revenue"].sum()) if "total_revenue" in kpis else None
-adr = (
-    float(kpis["avg_daily_rate"].dropna().mean())
-    if "avg_daily_rate" in kpis and kpis["avg_daily_rate"].notna().any()
-    else None
+# Every KPI is summed over ``period_rows`` — the rows at the *selected*
+# granularity — never over the whole frame. ``overall_kpis`` returns weekly,
+# monthly, quarterly and yearly rows at once, so summing ``kpis`` directly would
+# count the same nights three or four times over.
+total_listings = (
+    int(period_rows["total_listings"].max()) if not period_rows.empty else 0
 )
+total_nights = int(period_rows["total_nights"].sum())
+booked_nights = int(period_rows["booked_nights"].sum())
+occupancy = booked_nights / total_nights if total_nights else None
+has_rev = "total_revenue" in period_rows and period_rows["total_revenue"].notna().any()
+total_revenue = float(period_rows["total_revenue"].sum()) if has_rev else None
+# ADR is revenue over booked nights, both taken from the revenue side: the
+# revenue marts only cover priced listings, so averaging the per-period ADR or
+# dividing by the wider occupancy denominator would understate the rate.
+rev_booked = (
+    int(period_rows["rev_booked_nights"].sum())
+    if "rev_booked_nights" in period_rows
+    and period_rows["rev_booked_nights"].notna().any()
+    else 0
+)
+adr = total_revenue / rev_booked if total_revenue and rev_booked else None
 
 with st.container(horizontal=True):
     st.metric("Listings", f"{total_listings:,}", border=True)
@@ -119,5 +131,5 @@ with st.container(border=True):
 
 st.caption(
     f"Source: `marts.occupancy_by_listing` and `marts.revenue_by_listing` "
-    f"({len(kpis):,} aggregated rows loaded)."
+    f"({len(period_rows):,} rows at the selected granularity)."
 )

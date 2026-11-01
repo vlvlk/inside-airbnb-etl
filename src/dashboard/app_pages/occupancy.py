@@ -67,8 +67,9 @@ with row[1], st.container(border=True):
 with st.container(border=True):
     st.subheader("Price vs. occupancy")
     st.caption(
-        "Each point is one room type in one period. Higher-priced segments that "
-        "still fill nights sit in the upper-right."
+        "Each point is one room type in one period. In this snapshot the two do "
+        "not move together — the most expensive segment does not fill the most "
+        "nights. See the Insights page for the correlation."
     )
     scatter_df = data.add_period(rooms)
     if scatter_df.empty or scatter_df["avg_price_per_night"].isna().all():

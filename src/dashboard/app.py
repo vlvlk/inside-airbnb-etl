@@ -23,10 +23,15 @@ pages = st.navigation(
     {
         "Analytics": [
             st.Page(
+                "app_pages/insights.py",
+                title="Insights",
+                icon=":material/lightbulb:",
+                default=True,
+            ),
+            st.Page(
                 "app_pages/overview.py",
                 title="Overview",
                 icon=":material/dashboard:",
-                default=True,
             ),
             st.Page(
                 "app_pages/occupancy.py",
@@ -40,6 +45,11 @@ pages = st.navigation(
             ),
         ],
         "Data": [
+            st.Page(
+                "app_pages/data_quality.py",
+                title="Data quality",
+                icon=":material/fact_check:",
+            ),
             st.Page(
                 "app_pages/explorer.py",
                 title="SQL explorer",

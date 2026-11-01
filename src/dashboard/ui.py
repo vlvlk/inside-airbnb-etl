@@ -19,6 +19,13 @@ CHART_HEIGHT = 320
 #: Occupancy is stored as a fraction in [0, 1]; charts show it as a percentage.
 OCCUPANCY_AXIS = alt.Axis(format="%", title="Occupancy rate")
 
+#: Host-portfolio segments in the order they should read on a chart.
+HOST_SEGMENT_ORDER: tuple[str, ...] = (
+    "Single listing",
+    "Small portfolio (2-4 listings)",
+    "Professional (5+ listings)",
+)
+
 #: Month number -> short English month name, used for chart axes and labels.
 MONTH_NAMES: dict[int, str] = {
     1: "Jan",
@@ -84,6 +91,32 @@ def format_money(value: float | None, currency: str = "$") -> str:
     if value is None or pd.isna(value):
         return "n/a"
     return f"{currency}{value:,.0f}"
+
+
+#: Identifier columns. They are 64-bit integers in the warehouse, but their
+#: values routinely exceed JavaScript's ``Number.MAX_SAFE_INTEGER`` (2**53 - 1).
+#: Streamlit then renders them as error cells ("larger than the maximum
+#: supported integer values in number columns") and aligns them inconsistently
+#: with the safe ones, so they are cast to text before display.
+ID_COLUMNS: tuple[str, ...] = ("listing_id", "host_id")
+
+
+def stringify_ids(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` with any identifier column cast to text.
+
+    ``listing_id`` and ``host_id`` are opaque identifiers, not quantities. Casting
+    them to text keeps every digit exact (a Python ``int`` to ``str`` conversion
+    loses nothing) and lets the dataframe render them as plain, left-aligned
+    text instead of flagging the values above 2**53 - 1 as errors. The function
+    is a no-op when the frame carries none of :data:`ID_COLUMNS`.
+    """
+    present = [col for col in ID_COLUMNS if col in df.columns]
+    if not present:
+        return df
+    df = df.copy()
+    for col in present:
+        df[col] = df[col].astype("string")
+    return df
 
 
 def occupancy_trend_chart(df: pd.DataFrame, *, alt_text: str) -> alt.Chart:
@@ -186,6 +219,46 @@ def ranking_bar_chart(
     return chart
 
 
+def grouped_bar_chart(
+    df: pd.DataFrame,
+    *,
+    category_col: str,
+    value_col: str,
+    group_col: str,
+    value_axis: alt.Axis = OCCUPANCY_AXIS,
+    value_format: str = ".1%",
+    value_title: str = "Occupancy",
+    category_order: tuple[str, ...] | None = None,
+) -> alt.Chart:
+    """Grouped bar chart: one bar per (category, group) pair.
+
+    Used for the host-segment comparison, where each segment carries one bar per
+    year. ``category_order`` pins the segment order so the chart reads from the
+    smallest host to the largest instead of sorting alphabetically.
+    """
+    chart: alt.Chart = (
+        alt.Chart(df)
+        .mark_bar()
+        .encode(
+            x=alt.X(
+                f"{category_col}:N",
+                title=None,
+                sort=list(category_order) if category_order is not None else None,
+            ),
+            xOffset=alt.XOffset(f"{group_col}:N"),
+            y=alt.Y(f"{value_col}:Q", axis=value_axis),
+            color=alt.Color(f"{group_col}:N", title=None),
+            tooltip=[
+                alt.Tooltip(f"{category_col}:N", title="Segment"),
+                alt.Tooltip(f"{group_col}:N", title="Year"),
+                alt.Tooltip(f"{value_col}:Q", title=value_title, format=value_format),
+            ],
+        )
+        .properties(height=CHART_HEIGHT)
+    )
+    return chart
+
+
 def price_vs_occupancy_chart(
     df: pd.DataFrame,
     *,
@@ -215,6 +288,8 @@ def price_vs_occupancy_chart(
 def occupancy_column_config() -> ColumnConfigMappingInput:
     """Column configuration shared by the occupancy tables."""
     return {
+        "listing_id": st.column_config.TextColumn("Listing ID"),
+        "host_id": st.column_config.TextColumn("Host ID"),
         "occupancy_rate": st.column_config.NumberColumn("Occupancy", format="percent"),
         "avg_price_per_night": st.column_config.NumberColumn(
             "Avg price", format="$%.2f"
