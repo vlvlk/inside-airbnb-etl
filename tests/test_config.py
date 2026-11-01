@@ -87,7 +87,7 @@ class TestYamlLoading:
 
         assert data.raw_path == Path("./yaml-data/raw")
         assert data.processed_path == Path("./yaml-data/processed")
-        assert data.listings_path == Path("./yaml-data/raw/listings.csv")
+        assert data.listings_path == Path("./yaml-data/raw/listings.parquet")
 
     def test_missing_section_falls_back_to_defaults(self, tmp_path: Path):
         path = tmp_path / "partial.yaml"
@@ -272,7 +272,7 @@ class TestSectionsAreIndependent:
         data = DataSettings(data_path=Path("/srv/airbnb"))
 
         assert data.raw_path == Path("/srv/airbnb/raw")
-        assert data.calendar_path == Path("/srv/airbnb/raw/calendar.csv")
+        assert data.calendar_path == Path("/srv/airbnb/raw/calendar.parquet")
 
     def test_pipeline_defaults(self):
         pipeline = PipelineSettings()

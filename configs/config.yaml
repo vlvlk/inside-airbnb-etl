@@ -14,8 +14,11 @@ database:
 data:
   # Single root directory; raw/ and processed/ sub-paths are derived from it.
   data_path: ./data
-  listings_file: listings.csv
-  calendar_file: calendar.csv
+  # The bundled Toronto snapshot ships as Parquet, so a fresh clone runs with
+  # no download step. Point these at .csv / .csv.gz to read the originals
+  # instead — the extractor is chosen from the extension.
+  listings_file: listings.parquet
+  calendar_file: calendar.parquet
 
 pipeline:
   # Rows handed to the loader per COPY/INSERT (bounded memory per batch).

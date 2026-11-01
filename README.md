@@ -68,10 +68,14 @@ Calculated at multiple granularities:
 
 ## Quick Start
 
+The Toronto snapshot ships with the repository as Parquet
+(`data/raw/listings.parquet`, `data/raw/calendar.parquet`, ~9.5 MB total), so a
+fresh clone runs end to end with **no download step and no network access**.
+
 ### Prerequisites
 
 - Docker & Docker Compose
-- Python 3.11+ (for local development)
+- Python 3.12 (for local development)
 
 ### Using Docker (Recommended)
 
@@ -107,6 +111,36 @@ streamlit run src/dashboard/app.py
 cp configs/.env.example .env
 ```
 
+### Bundled dataset
+
+The committed artifacts come from the Inside Airbnb snapshot for **Toronto,
+Canada, 2026-09-16**
+([source](https://insideairbnb.com/get-the-data)):
+
+| File | Rows | Columns | Size |
+| ------ | ------ | --------- | ------ |
+| `data/raw/listings.parquet` | 22,050 | 90 (all CSV columns) | 7.4 MB |
+| `data/raw/calendar.parquet` | 8,048,251 | 5 | 2.1 MB |
+
+Parquet keeps the repository small: the same data as `csv.gz` is 31.7 MB, so the
+committed form is ~3.3x lighter. The listings file keeps every column, so the
+raw layer stays a 1:1 copy of the CSV.
+
+To use another city or a newer snapshot, download the `csv.gz` files from
+Inside Airbnb and rebuild the artifacts:
+
+```bash
+python scripts/csv_to_parquet.py
+# or point it at explicit files
+python scripts/csv_to_parquet.py --listings /tmp/listings.csv.gz --calendar /tmp/calendar.csv.gz
+```
+
+The same snapshot is also published on
+[Kaggle](https://www.kaggle.com/datasets/vladimirkondratev/inside-airbnb-toronto-sep-2026/)
+if you prefer downloading it from there. The extractor is chosen from the
+configured extension, so pointing `data.listings_file` at a `.csv` / `.csv.gz`
+file makes the pipeline read the original downloads directly.
+
 ## Configuration
 
 Configuration lives in one typed object (`src.config.AppConfig`) built from
@@ -136,8 +170,8 @@ database:
 
 data:
   data_path: ./data          # raw/ and processed/ are derived from this
-  listings_file: listings.csv
-  calendar_file: calendar.csv
+  listings_file: listings.parquet   # .csv / .csv.gz also work
+  calendar_file: calendar.parquet
 
 pipeline:
   batch_size: 100000     # rows per COPY/INSERT batch
@@ -184,6 +218,10 @@ airbnb-occupancy-pipeline/
 ├── configs/
 │   ├── config.yaml          # Pipeline configuration
 │   └── .env.example         # Environment variables template
+├── data/
+│   └── raw/                 # Bundled Toronto snapshot (Parquet, committed)
+├── scripts/
+│   └── csv_to_parquet.py    # Rebuild the artifacts from csv.gz downloads
 ├── docker/
 │   ├── Dockerfile           # Application container
 │   └── docker-compose.yml   # PostgreSQL + app services
@@ -200,7 +238,9 @@ airbnb-occupancy-pipeline/
 │   │   ├── listing.py       # Listing Pydantic models
 │   │   └── calendar.py      # Calendar Pydantic models
 │   ├── extract/
+│   │   ├── base.py          # Shared validation/batching logic
 │   │   ├── csv_extractor.py # Chunked CSV extraction
+│   │   ├── parquet_extractor.py # Row-group Parquet extraction
 │   │   └── normalize.py     # Vectorized pandas normalization
 │   ├── load/
 │   │   └── postgres_loader.py # PostgreSQL COPY-based bulk loading
@@ -413,10 +453,19 @@ pyright
 
 ## Data Sources
 
-Expected CSV files in `data/raw/`:
+The repository ships one Inside Airbnb snapshot, committed as Parquet in
+`data/raw/`:
 
-- `listings.csv` - Airbnb listings data
-- `calendar.csv` - Availability calendar data
+- `listings.parquet` — Toronto listings, snapshot 2026-09-16, all 90 CSV columns
+- `calendar.parquet` — availability calendar for the same snapshot
+
+Source: [Inside Airbnb](https://insideairbnb.com/get-the-data) (Toronto,
+Canada). A copy of the same snapshot is on
+[Kaggle](https://www.kaggle.com/datasets/vladimirkondratev/inside-airbnb-toronto-sep-2026/).
+
+The original `csv.gz` downloads are not committed. Rebuild the Parquet artifacts
+with [`scripts/csv_to_parquet.py`](scripts/csv_to_parquet.py:1); the pipeline
+reads whichever format `data.listings_file` / `data.calendar_file` point at.
 
 ## License
 

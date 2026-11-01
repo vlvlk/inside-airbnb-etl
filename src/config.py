@@ -190,8 +190,10 @@ class DataSettings(SectionSettings):
     yaml_section: ClassVar[str] = "data"
 
     data_path: Path = Field(default=Path("./data"), alias="DATA_PATH")
-    listings_file: str = "listings.csv"
-    calendar_file: str = "calendar.csv"
+    # The bundled snapshot is Parquet (see README); these defaults must match
+    # ``configs/config.yaml`` so a config-less run behaves identically.
+    listings_file: str = "listings.parquet"
+    calendar_file: str = "calendar.parquet"
 
     @property
     def raw_path(self) -> Path:

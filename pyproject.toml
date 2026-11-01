@@ -10,6 +10,9 @@ readme = "README.md"
 requires-python = "==3.12.14"
 dependencies = [
     "pandas==3.1.0",
+    # The bundled Toronto snapshot ships as Parquet; pyarrow is the engine both
+    # for reading it and for rebuilding it via scripts/csv_to_parquet.py.
+    "pyarrow==26.0.0",
     "pydantic==2.14.2",
     "pydantic-settings==2.16.2",
     "sqlalchemy==2.1.6",

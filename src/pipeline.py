@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 from src.config import AppConfig, get_config, setup_logging
-from src.extract.csv_extractor import CSVExtractor
+from src.extract import make_extractor
 from src.load.postgres_loader import PostgresLoader
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ class ETLPipeline:
     def __init__(self, config_path: Path | None = None):
         self.config: AppConfig = get_config(config_path)
         setup_logging(self.config)
-        self.extractor = CSVExtractor(config_path)
+        self.extractor = make_extractor(config_path)
         self.loader = PostgresLoader(config_path)
 
     def setup_database(self) -> None:

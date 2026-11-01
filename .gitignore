@@ -49,7 +49,8 @@ coverage.xml
 configs/.env
 
 # ---------------------------------------------------------------------------
-# Data — raw/processed datasets are large and reproducible, never versioned.
+# Data — the bundled Toronto snapshot lives in git as Parquet (see README).
+# Everything else under data/ is reproducible and never versioned.
 # ---------------------------------------------------------------------------
 data/raw/*
 !data/raw/.gitkeep
@@ -59,6 +60,9 @@ data/processed/*
 !tests/**/*.csv
 *.parquet
 *.json.gz
+# The committed artifacts (~9.5 MB total) must come *after* the ``*.parquet``
+# rule above, because the last matching pattern wins in git.
+!data/raw/*.parquet
 
 # ---------------------------------------------------------------------------
 # Logs
