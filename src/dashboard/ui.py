@@ -9,6 +9,7 @@ from __future__ import annotations
 import altair as alt
 import pandas as pd
 import streamlit as st
+from streamlit.elements.lib.column_config_utils import ColumnConfigMappingInput
 
 from src.dashboard.data import GRANULARITIES
 
@@ -17,6 +18,22 @@ CHART_HEIGHT = 320
 
 #: Occupancy is stored as a fraction in [0, 1]; charts show it as a percentage.
 OCCUPANCY_AXIS = alt.Axis(format="%", title="Occupancy rate")
+
+#: Month number -> short English month name, used for chart axes and labels.
+MONTH_NAMES: dict[int, str] = {
+    1: "Jan",
+    2: "Feb",
+    3: "Mar",
+    4: "Apr",
+    5: "May",
+    6: "Jun",
+    7: "Jul",
+    8: "Aug",
+    9: "Sep",
+    10: "Oct",
+    11: "Nov",
+    12: "Dec",
+}
 
 
 def sidebar_filters(
@@ -122,29 +139,15 @@ def revenue_trend_chart(df: pd.DataFrame, *, alt_text: str) -> alt.Chart:
 
 def seasonality_chart(df: pd.DataFrame, *, alt_text: str) -> alt.Chart:
     """Bar chart of occupancy by calendar month."""
-    month_names = [
-        "Jan",
-        "Feb",
-        "Mar",
-        "Apr",
-        "May",
-        "Jun",
-        "Jul",
-        "Aug",
-        "Sep",
-        "Oct",
-        "Nov",
-        "Dec",
-    ]
     chart_df = df.copy()
-    chart_df["month_name"] = (
-        chart_df["month"].astype(int).map(lambda m: month_names[(m - 1) % 12])
-    )
+    # Nullable integers keep the mapping total: a NULL month stays missing
+    # instead of raising while casting float64 to a plain integer dtype.
+    chart_df["month_name"] = chart_df["month"].astype("Int64").map(MONTH_NAMES)
     chart: alt.Chart = (
         alt.Chart(chart_df)
         .mark_bar()
         .encode(
-            x=alt.X("month_name:N", title=None, sort=month_names),
+            x=alt.X("month_name:N", title=None, sort=list(MONTH_NAMES.values())),
             y=alt.Y("occupancy_rate:Q", axis=OCCUPANCY_AXIS),
             tooltip=[
                 alt.Tooltip("month_name:N", title="Month"),
@@ -209,7 +212,7 @@ def price_vs_occupancy_chart(
     return chart
 
 
-def occupancy_column_config() -> dict[str, object]:
+def occupancy_column_config() -> ColumnConfigMappingInput:
     """Column configuration shared by the occupancy tables."""
     return {
         "occupancy_rate": st.column_config.NumberColumn("Occupancy", format="percent"),

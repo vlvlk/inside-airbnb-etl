@@ -11,7 +11,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from src.dashboard import data
+from src.dashboard import data, ui
 
 
 def _frame() -> pd.DataFrame:
@@ -78,6 +78,64 @@ def test_add_period_weekly_uses_iso_week() -> None:
     )
     period = data.add_period(df)["period"].iloc[0]
     assert period == pd.Timestamp("2026-08-31")  # Monday of ISO week 36
+
+
+def test_add_period_handles_nullable_float_columns() -> None:
+    """SQL returns NULLs as float64, so the period columns may hold NaN.
+
+    The frame mixes a monthly row, a weekly row and a quarterly row, which is
+    exactly the shape of the marts tables.
+    """
+    df = pd.DataFrame(
+        {
+            "year": [2026.0, 2026.0, 2026.0],
+            "month": [9.0, float("nan"), float("nan")],
+            "week_of_year": [float("nan"), 36.0, float("nan")],
+            "quarter": [3.0, 3.0, 3.0],
+        }
+    )
+    periods = data.add_period(df)["period"].tolist()
+    assert periods[0] == pd.Timestamp("2026-09-01")
+    assert periods[1] == pd.Timestamp("2026-08-31")  # Monday of ISO week 36
+    assert pd.isna(periods[2])
+
+
+def test_add_period_ignores_extra_columns() -> None:
+    """Only year/month/day may reach ``to_datetime``; other columns are fine."""
+    df = pd.DataFrame(
+        {"year": [2026], "month": [9], "occupancy_rate": [0.5], "listing_id": [1]}
+    )
+    period = data.add_period(df)["period"].iloc[0]
+    assert period == pd.Timestamp("2026-09-01")
+
+
+def test_seasonality_chart_labels_months() -> None:
+    """Month numbers are rendered as short English names on the x axis."""
+    df = pd.DataFrame(
+        {
+            "month": [1.0, 6.0, 12.0],
+            "occupancy_rate": [0.4, 0.7, 0.9],
+            "booked_nights": [10, 20, 30],
+        }
+    )
+    chart = ui.seasonality_chart(df, alt_text="Occupancy by month").to_dict()
+    values = next(iter(chart["datasets"].values()))
+    assert [row["month_name"] for row in values] == ["Jan", "Jun", "Dec"]
+
+
+def test_seasonality_chart_keeps_null_month_missing() -> None:
+    """A NULL month stays missing instead of raising while casting."""
+    df = pd.DataFrame(
+        {
+            "month": [1.0, None],
+            "occupancy_rate": [0.4, 0.5],
+            "booked_nights": [10, 5],
+        }
+    )
+    chart = ui.seasonality_chart(df, alt_text="Occupancy by month").to_dict()
+    values = next(iter(chart["datasets"].values()))
+    assert values[0]["month_name"] == "Jan"
+    assert values[1]["month_name"] is None
 
 
 def test_available_years_union_and_sorted() -> None:

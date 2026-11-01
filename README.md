@@ -4,18 +4,20 @@ ETL pipeline for processing Airbnb listings and calendar data to calculate occup
 
 ## Architecture
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Raw CSV   │────▶│   Extract   │────▶│  PostgreSQL │────▶│  Transform  │
-│  (listings, │     │ (pandas,    │     │   (Raw)     │     │  (SQL CTE)  │
-│  calendar)  │     │ vectorized) │     │  via COPY   │     │             │
-└─────────────┘     └─────────────┘     └─────────────┘     └──────┬──────┘
-                                                                     │
-                                                                     ▼
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│  Analytics  │◀────│   Marts     │◀────│  Staging    │◀────│  Transform  │
-│  (BI/Streamlit)     │ (Aggregates)│     │  (Cleaned)  │     │  (SQL CTE)  │
-└─────────────┘     └─────────────┘     └─────────────┘     └─────────────┘
+```mermaid
+flowchart LR
+    subgraph Ingestion [Сбор]
+        CSV[Raw CSV] -->|pandas / COPY| Raw[(Postgres Raw)]
+    end
+
+    subgraph dbt_or_SQL [Трансформация]
+        Raw -->|SQL CTE| Stg[(Staging Cleaned)]
+        Stg -->|SQL CTE| Marts[(Marts Aggregates)]
+    end
+
+    subgraph Consumption [Потребление]
+        Marts --> BI[Streamlit / BI]
+    end
 ```
 
 ### Performance
@@ -367,6 +369,12 @@ ORDER BY year, month;
 
 ## Testing
 
+The test and lint tooling lives in the ``dev`` extra, so install it first:
+
+```bash
+uv sync --extra dev
+```
+
 ```bash
 # Run all tests
 pytest
@@ -390,8 +398,12 @@ ruff check src tests
 ruff format src tests
 
 # Type check
-mypy src
+pyright
 ```
+
+> **Note:** `pandas==3.1.0` ships without a `py.typed` marker, so the
+> `pandas-stubs` package (installed with the `dev` extra) is required for
+> accurate type checking of pandas code.
 
 ### Adding New Transformations
 

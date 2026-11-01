@@ -12,7 +12,9 @@ by hand with ``psql`` and reused outside the dashboard.
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from pathlib import Path
+from typing import TypeAlias
 
 import numpy as np
 import pandas as pd
@@ -28,6 +30,9 @@ QUERIES_DIR = Path(__file__).resolve().parents[2] / "sql" / "queries"
 #: Cache lifetime for query results.
 CACHE_TTL = "10m"
 
+#: Scalar values accepted as SQL bind parameters by :func:`run_query`.
+SqlParamValue: TypeAlias = str | bytes | date | timedelta | bool | int | float | None
+
 
 @st.cache_resource
 def get_engine() -> Engine:
@@ -36,7 +41,9 @@ def get_engine() -> Engine:
 
 
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False)
-def run_query(name: str, params: dict[str, object] | None = None) -> pd.DataFrame:
+def run_query(
+    name: str, params: dict[str, SqlParamValue] | None = None
+) -> pd.DataFrame:
     """Run the named query from :data:`QUERIES_DIR` and return a DataFrame.
 
     Parameters
@@ -148,20 +155,24 @@ def add_period(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
     if "month" in df.columns:
-        period = pd.to_datetime(
-            dict(year=df["year"], month=df["month"], day=1), errors="coerce"
-        )
+        # ``to_datetime`` expects a frame of date parts, not a dict of series,
+        # and the frame must carry nothing but year/month/day.
+        period = pd.to_datetime(df[["year", "month"]].assign(day=1), errors="coerce")
         if "week_of_year" in df.columns:
             weekly = df["month"].isna() & df["week_of_year"].notna()
             if weekly.any():
-                week_start = pd.to_datetime(
-                    df.loc[weekly, "year"].astype(str)
-                    + "-W"
-                    + df.loc[weekly, "week_of_year"]
-                    .astype(int)
+                # Nullable integers keep the ISO week text stable when the
+                # source column is a float (NULLs become float64 in pandas).
+                year_text = df["year"].loc[weekly].astype("Int64").astype(str)
+                week_text = (
+                    df["week_of_year"]
+                    .loc[weekly]
+                    .astype("Int64")
                     .astype(str)
                     .str.zfill(2)
-                    + "-1",
+                )
+                week_start = pd.to_datetime(
+                    year_text + "-W" + week_text + "-1",
                     format="%G-W%V-%u",
                     errors="coerce",
                 )

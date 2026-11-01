@@ -184,7 +184,12 @@ class PostgresLoader:
             f"ON CONFLICT ({', '.join(conflict_cols)}) DO UPDATE SET {assignments}"
         )
 
-        records: list[dict[str, Any]] = df.to_dict(orient="records")
+        # ``to_dict(orient="records")`` types the column keys as ``Hashable``;
+        # the SQL bind names are always plain strings.
+        records: list[dict[str, Any]] = [
+            {str(column): value for column, value in row.items()}
+            for row in df.to_dict(orient="records")
+        ]
         with self.session() as session:
             session.execute(text(sql), records)
 

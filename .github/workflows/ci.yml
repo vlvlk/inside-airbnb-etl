@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+
+      # The linters, the type checker and pytest live in the ``dev`` extra, so
+      # it has to be installed explicitly before running them.
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Run checks with uv
+        run: |
+          uv run --no-sync ruff check .
+          uv run --no-sync pyright
+          uv run --no-sync pytest

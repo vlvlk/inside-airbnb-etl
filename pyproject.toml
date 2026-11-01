@@ -26,6 +26,10 @@ dev = [
     "pytest-cov==7.1.0",
     "ruff==0.17.3",
     "pyright==1.1.414",
+    # pandas 3.1.0 ships no ``py.typed`` marker, so without the stubs pyright
+    # infers types from the pandas sources and reports dozens of false
+    # positives on perfectly valid DataFrame/Series code.
+    "pandas-stubs==3.1.0.261029",
 ]
 
 # src-layout: the importable package is ``src`` (imports are ``from src...``),
