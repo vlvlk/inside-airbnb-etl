@@ -1,4 +1,4 @@
-"""Configuration management for Airbnb Occupancy Pipeline.
+"""Configuration management for Inside Airbnb ETL.
 
 Single source of truth
 ----------------------
@@ -216,6 +216,32 @@ class DataSettings(SectionSettings):
         return self.raw_path / self.calendar_file
 
 
+class DashboardSettings(SectionSettings):
+    """Dashboard data-source settings.
+
+    The dashboard can read the ``marts`` schema from PostgreSQL (the production
+    path, populated by the ETL pipeline) or from a local DuckDB file built
+    straight out of the bundled Parquet snapshot. The DuckDB path exists so a
+    fresh clone — and a public deployment — can serve the dashboard without a
+    database server and without waiting for the 8M-row load.
+
+    ``source: auto`` tries PostgreSQL first and falls back to DuckDB, so a
+    reviewer who has not started Docker still gets a working dashboard.
+    """
+
+    yaml_section: ClassVar[str] = "dashboard"
+
+    #: ``auto`` | ``postgres`` | ``duckdb``.
+    source: str = Field(default="auto", alias="DASHBOARD_SOURCE")
+    #: Directory holding the Parquet demo layer (one file per table).
+    demo_dir: str = Field(default="data/demo", alias="DASHBOARD_DEMO_DIR")
+
+    @property
+    def demo_path(self) -> Path:
+        """Path to the directory holding the Parquet demo layer."""
+        return Path(self.demo_dir)
+
+
 class PipelineSettings(SectionSettings):
     """ETL pipeline tuning parameters."""
 
@@ -250,6 +276,7 @@ class AppConfig(BaseSettings):
 
     database: DatabaseSettings
     data: DataSettings
+    dashboard: DashboardSettings
     pipeline: PipelineSettings
     logging: LoggingSettings
 
@@ -267,6 +294,10 @@ class AppConfig(BaseSettings):
             data=DataSettings(
                 _yaml_file=yaml_file,  # type: ignore[call-arg]
                 **translate_overrides(DataSettings, overrides.get("data", {})),
+            ),
+            dashboard=DashboardSettings(
+                _yaml_file=yaml_file,  # type: ignore[call-arg]
+                **translate_overrides(DashboardSettings, overrides.get("dashboard", {})),
             ),
             pipeline=PipelineSettings(
                 _yaml_file=yaml_file,  # type: ignore[call-arg]

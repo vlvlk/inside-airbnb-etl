@@ -1,5 +1,5 @@
-# Dockerfile for Airbnb Occupancy Pipeline
-FROM python:3.12-slim
+# Dockerfile for Inside Airbnb ETL
+FROM python:3.14-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -20,6 +20,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 # Copy project
 COPY src/ ./src/
 COPY sql/ ./sql/
+COPY scripts/ ./scripts/
 COPY configs/ ./configs/
 COPY .streamlit/ ./.streamlit/
 

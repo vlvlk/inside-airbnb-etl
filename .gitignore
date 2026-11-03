@@ -64,6 +64,12 @@ data/processed/*
 # rule above, because the last matching pattern wins in git.
 !data/raw/*.parquet
 
+# The Parquet demo layer (~14 MB) is committed too: it is what lets the
+# dashboard run without PostgreSQL. Rebuild it with
+# ``python -m scripts.build_demo_marts --force`` after a pipeline change.
+!data/demo/
+!data/demo/*.parquet
+
 # ---------------------------------------------------------------------------
 # Logs
 # ---------------------------------------------------------------------------

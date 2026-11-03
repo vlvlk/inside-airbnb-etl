@@ -1,4 +1,14 @@
-# Airbnb Occupancy Analytics Pipeline
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
+![License](https://img.shields.io/github/license/vlvlk/inside-airbnb-etl)
+![Build](https://github.com/vlvlk/inside-airbnb-etl/actions/workflows/ci.yml/badge.svg)
+![Coverage](https://codecov.io/gh/vlvlk/inside-airbnb-etl/branch/main/graph/badge.svg)
+![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
+![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+
+# Inside Airbnb ETL
 
 An end-to-end analytics project over the Inside Airbnb snapshot for **Toronto,
 Canada (2026-09-17 → 2027-09-17)**: a SQL ETL pipeline loads 22,050 listings and
@@ -21,8 +31,8 @@ on the [Insights](#dashboard-streamlit) page):
 3. **Whole homes earn a large premium.** Entire homes fill **48.8%** at
    **$296**/night; private rooms fill **44.7%** at **$117**/night. The price gap
    (2.5x) is far wider than the occupancy gap.
-4. **Higher prices do not buy higher occupancy.** The price↔occupancy correlation
-   is **−0.23** across room types and months — flat to negative.
+4. **Lower prices are associated with higher occupancy.** The price↔occupancy
+   correlation is **−0.23** across room types and months — negative.
 5. **Location is the biggest lever.** The best neighbourhood fills **67.6%** of
    nights, the worst **22.8%** — a 45-point spread inside one city.
 
@@ -123,9 +133,31 @@ The Toronto snapshot ships with the repository as Parquet
 (`data/raw/listings.parquet`, `data/raw/calendar.parquet`, ~9.5 MB total), so a
 fresh clone runs end to end with **no download step and no network access**.
 
+### Just want to see the dashboard?
+
+No database, no Docker, no 8M-row load:
+
+```bash
+pip install -e .
+streamlit run src/dashboard/app.py
+```
+
+The dashboard reads a committed Parquet demo layer (`data/demo/`, ~14 MB) built
+from the same snapshot. Every query, chart and metric is the same one the
+PostgreSQL path produces — the SQL files in `sql/queries/` are shared, and the
+build script verifies the demo layer against the figures in
+[`docs/methodology.md`](docs/methodology.md:1) before writing it. The sidebar
+shows a **Demo data** badge so it is always clear which source is live.
+
+To rebuild the demo layer after changing the pipeline:
+
+```bash
+python -m scripts.build_demo_marts --force
+```
+
 ### Prerequisites
 
-- Docker & Docker Compose
+- Docker & Docker Compose (for the PostgreSQL path)
 - Python 3.12 (for local development)
 
 ### Using Docker (Recommended)
@@ -238,6 +270,10 @@ data:
   listings_file: listings.parquet   # .csv / .csv.gz also work
   calendar_file: calendar.parquet
 
+dashboard:
+  source: auto           # auto | postgres | duckdb
+  demo_dir: data/demo    # Parquet demo layer (used by the duckdb source)
+
 pipeline:
   batch_size: 100000     # rows per COPY/INSERT batch
   chunk_size: 250000     # rows read per pandas pass
@@ -265,6 +301,10 @@ POSTGRES_PASSWORD=airbnb
 # Data root (overrides data.data_path)
 DATA_PATH=./data
 
+# Dashboard data source (overrides dashboard.*)
+DASHBOARD_SOURCE=auto
+DASHBOARD_DEMO_DIR=data/demo
+
 # Pipeline (overrides pipeline.*)
 BATCH_SIZE=100000
 CHUNK_SIZE=250000
@@ -279,16 +319,18 @@ LOG_LEVEL=INFO
 ## Project Structure
 
 ```
-airbnb-occupancy-pipeline/
+inside-airbnb-etl/
 ├── configs/
 │   ├── config.yaml          # Pipeline configuration
 │   └── .env.example         # Environment variables template
 ├── data/
-│   └── raw/                 # Bundled Toronto snapshot (Parquet, committed)
+│   ├── raw/                 # Bundled Toronto snapshot (Parquet, committed)
+│   └── demo/                # Parquet demo layer for the no-DB dashboard
 ├── docs/
 │   └── methodology.md       # Metric definitions and measured limitations
 ├── scripts/
-│   └── csv_to_parquet.py    # Rebuild the artifacts from csv.gz downloads
+│   ├── csv_to_parquet.py    # Rebuild the artifacts from csv.gz downloads
+│   └── build_demo_marts.py  # Build the demo layer (DuckDB -> Parquet)
 ├── docker/
 │   ├── Dockerfile           # Application container
 │   └── docker-compose.yml   # PostgreSQL + app services
@@ -313,7 +355,8 @@ airbnb-occupancy-pipeline/
 │   │   └── postgres_loader.py # PostgreSQL COPY-based bulk loading
 │   ├── dashboard/           # Streamlit dashboard over the marts schema
 │   │   ├── app.py           # Dashboard entry point (st.navigation)
-│   │   ├── data.py          # Cached DB access + granularity helpers
+│   │   ├── backend.py       # QueryBackend: PostgreSQL or DuckDB + dialect adapter
+│   │   ├── data.py          # Cached query access + granularity helpers
 │   │   ├── ui.py            # Sidebar filters, formatting, Altair charts
 │   │   └── app_pages/       # Insights, Overview, Occupancy, Revenue, Data quality, SQL explorer
 │   └── pipeline.py          # Main ETL orchestration
@@ -322,7 +365,8 @@ airbnb-occupancy-pipeline/
 ├── tests/
 │   ├── test_models.py       # Pydantic model tests
 │   ├── test_extract.py      # Extraction tests
-│   └── test_dashboard.py    # Dashboard data-helper tests
+│   ├── test_dashboard.py    # Dashboard data-helper tests
+│   └── test_backend.py      # Backend selection, dialect adapter, demo-layer parity
 ├── pyproject.toml           # Project metadata & dependencies
 └── README.md
 ```
@@ -408,10 +452,44 @@ Pages:
 | **SQL explorer** | Runs any saved query and shows the SQL for copy-paste into `psql` |
 
 The dashboard reads the pre-aggregated marts only (never the raw layer), caches
-query results with `@st.cache_data`, and keeps a single connection pool per
-process via `@st.cache_resource`. The Data quality page reads the raw and staging
-layers on purpose — a quality check has to compare layers. The theme lives in
+query results with `@st.cache_data`, and keeps a single connection per process
+via `@st.cache_resource`. The Data quality page reads the raw and staging layers
+on purpose — a quality check has to compare layers. The theme lives in
 [`.streamlit/config.toml`](.streamlit/config.toml:1).
+
+### Two data sources, one set of queries
+
+The dashboard can be served by either engine, chosen by `dashboard.source`:
+
+| Source | When | What it reads |
+| ------ | ---- | ------------- |
+| `postgres` | The pipeline has populated the database | `marts` schema in PostgreSQL |
+| `duckdb` | No database available | The committed Parquet demo layer |
+| `auto` (default) | Always | PostgreSQL if reachable, otherwise the demo layer |
+
+The engine is the only thing that varies. Both paths execute the same
+[`sql/queries/*.sql`](sql/queries/overall_kpis.sql:1) files through the
+`QueryBackend` abstraction in [`src/dashboard/backend.py`](src/dashboard/backend.py:1),
+so no aggregation is reimplemented in Python. The two dialects differ in exactly
+two constructs — `UNIQUE NULLS NOT DISTINCT` and the `:name` bind markers — and
+[`to_duckdb_sql()`](src/dashboard/backend.py:139) translates them.
+
+The demo layer is built by [`scripts/build_demo_marts.py`](scripts/build_demo_marts.py:1),
+which runs the *entire* pipeline — raw load, staging, marts — inside a throwaway
+DuckDB database using the same SQL scripts and the same vectorized normalizers,
+then exports the result as Parquet. Before exporting, it asserts the figures
+match the ones in [`docs/methodology.md`](docs/methodology.md:1):
+
+| Figure | Expected |
+| ------ | -------- |
+| Calendar nights | 8,048,251 |
+| Booked nights | 3,814,938 |
+| Occupancy rate | 47.4% |
+| Estimated revenue | $538,161,557 |
+
+A mismatch fails the build, so the demo layer cannot silently drift from the
+documented numbers. The same check runs as a test in
+[`tests/test_backend.py`](tests/test_backend.py:1).
 
 The assumptions behind every metric, with the measured size of each error, are
 written up in [`docs/methodology.md`](docs/methodology.md:1).

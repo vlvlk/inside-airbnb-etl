@@ -160,9 +160,9 @@ if not seg_year.empty:
         if single_adr is not None and pro_adr is not None:
             st.markdown(
                 f"The same split holds on price: single-listing hosts average "
-                f"**{ui.format_money(single_adr)}** a night against "
-                f"**{ui.format_money(pro_adr)}** for professionals, so the smaller hosts "
-                "win on both occupancy and rate."
+                f"**{ui.format_money_md(single_adr)}** a night against "
+                f"**{ui.format_money_md(pro_adr)}** for professionals, so the smaller "
+                "hosts win on both occupancy and rate."
             )
         row = st.columns(2)
         with row[0]:
@@ -220,10 +220,10 @@ if not room_year.empty:
             )
             st.markdown(
                 f"Entire homes fill **{ui.format_occupancy(e['occupancy_rate'])}** of "
-                f"nights at **{ui.format_money(e['avg_price_per_night'])}** a night; "
+                f"nights at **{ui.format_money_md(e['avg_price_per_night'])}** a night; "
                 f"private rooms fill **{ui.format_occupancy(p['occupancy_rate'])}** at "
-                f"**{ui.format_money(p['avg_price_per_night'])}**. The price gap is much "
-                f"wider than the occupancy gap"
+                f"**{ui.format_money_md(p['avg_price_per_night'])}**. The price gap is "
+                f"much wider than the occupancy gap"
                 + (f" ({price_ratio:.1f}x the rate)" if price_ratio else "")
                 + " — guests pay a large premium for a whole home without it being much "
                 "harder to fill."
@@ -246,14 +246,14 @@ if not price_occ.empty and price_occ["avg_price_per_night"].notna().any():
     correlation = price_occ["avg_price_per_night"].corr(price_occ["occupancy_rate"])
 
     with st.container(border=True):
-        st.subheader("4. Higher prices do not buy higher occupancy")
+        st.subheader("4. Lower prices are associated with higher occupancy")
         if pd.notna(correlation):
             st.markdown(
                 f"Across room types and months the correlation between price and "
-                f"occupancy is **{correlation:+.2f}** — effectively flat, and if anything "
-                "negative. Being the most expensive listing in a segment does not make it "
-                "fill faster; demand here is driven by season and location, not by price "
-                "alone."
+                f"occupancy is **{correlation:+.2f}** — negative, so cheaper segments are "
+                "associated with higher occupancy. Being the most expensive listing in a "
+                "segment does not make it fill faster; demand here is driven by season and "
+                "location, not by price alone."
             )
         st.altair_chart(
             ui.price_vs_occupancy_chart(
@@ -317,8 +317,9 @@ with st.container(border=True):
     st.markdown(
         "- **Price to the season.** The gap between the best and worst month is wide "
         "enough that a flat calendar price is leaving revenue on the table.\n"
-        "- **Do not compete on being the most expensive.** Higher rates do not correlate "
-        "with higher occupancy; the win comes from season, location and room type.\n"
+        "- **Compete on price, not on being the most expensive.** Lower rates are "
+        "associated with higher occupancy; the win comes from season, location and room "
+        "type.\n"
         "- **Whole homes earn their premium.** The rate gap to private rooms is far "
         "larger than the occupancy gap, so the premium is not being competed away.\n"
         "- **Check the neighbourhood first.** Location moves occupancy more than any "

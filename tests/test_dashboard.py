@@ -8,6 +8,11 @@ file to verify the file lookup and bind-parameter plumbing.
 
 from __future__ import annotations
 
+import ast
+import re
+from pathlib import Path
+from typing import Any, cast
+
 import pandas as pd
 import pytest
 
@@ -169,39 +174,54 @@ def test_available_years_skips_empty() -> None:
     assert data.available_years(pd.DataFrame()) == []
 
 
-def test_run_query_reads_file_and_binds_params(
+def test_run_query_reads_file_and_delegates_to_backend(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``run_query`` loads the named SQL file and forwards bind parameters."""
+    """``run_query`` loads the named SQL file and hands it to the backend.
+
+    The backend is the only thing that varies between PostgreSQL and DuckDB, so
+    this test pins the contract: the file is read, the SQL text and the bind
+    parameters both reach the backend, and the returned frame is passed through.
+    """
     (tmp_path / "probe.sql").write_text("SELECT :value AS value", encoding="utf-8")
     monkeypatch.setattr(data, "QUERIES_DIR", tmp_path)
 
-    class _Conn:
-        def __enter__(self) -> "_Conn":
-            return self
-
-        def __exit__(self, *exc: object) -> None:
-            return None
-
-    class _Engine:
-        def connect(self) -> _Conn:
-            return _Conn()
-
     captured: dict[str, object] = {}
 
-    def fake_read_sql(sql: object, conn: object, params: object) -> pd.DataFrame:
-        captured["sql"] = str(sql)
-        captured["params"] = params
-        return pd.DataFrame({"value": [42]})
+    class _Backend:
+        def execute(
+            self, sql: str, params: dict[str, object] | None = None
+        ) -> pd.DataFrame:
+            captured["sql"] = sql
+            captured["params"] = params
+            return pd.DataFrame({"value": [42]})
 
-    monkeypatch.setattr(data, "get_engine", lambda: _Engine())
-    monkeypatch.setattr(data.pd, "read_sql", fake_read_sql)
+    monkeypatch.setattr(data, "get_backend", lambda: _Backend())
 
     result = data.run_query("probe", {"value": 42})
 
     assert result.iloc[0]["value"] == 42
     assert captured["params"] == {"value": 42}
     assert "SELECT" in str(captured["sql"])
+
+
+def test_run_query_returns_empty_frame_without_a_backend(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No backend is an empty frame, not an exception.
+
+    The pages already render a "run the pipeline first" warning for empty
+    loaders, which is the right message when neither engine is available. A
+    raised error would replace that guidance with a traceback.
+    """
+    (tmp_path / "probe.sql").write_text("SELECT 1", encoding="utf-8")
+    monkeypatch.setattr(data, "QUERIES_DIR", tmp_path)
+    monkeypatch.setattr(data, "get_backend", lambda: None)
+
+    result = data.run_query("probe")
+
+    assert isinstance(result, pd.DataFrame)
+    assert result.empty
 
 
 def test_stringify_ids_casts_identifier_columns_to_text() -> None:
@@ -233,13 +253,89 @@ def test_stringify_ids_is_a_noop_without_identifier_columns() -> None:
     assert result.equals(df)
 
 
+def test_format_money_md_escapes_the_dollar_sign() -> None:
+    """Money shown through ``st.markdown`` must not open a KaTeX expression.
+
+    A *pair* of unescaped ``$`` signs makes Streamlit parse everything between
+    them as LaTeX, which drops the spaces (``a night against`` becomes
+    ``anightagainst``) and turns ``;`` into a thin space. The Markdown variant
+    escapes the currency symbol so the surrounding prose survives.
+    """
+    assert ui.format_money(1234) == "$1,234"
+    assert ui.format_money_md(1234) == r"\$1,234"
+    # Every '$' is escaped, so no bare '$' is left to open a math expression.
+    assert re.search(r"(?<!\\)\$", ui.format_money_md(1234)) is None
+
+
+def test_format_money_md_handles_missing_values() -> None:
+    """``n/a`` carries no ``$``, so escaping leaves it untouched."""
+    assert ui.format_money_md(None) == "n/a"
+    assert ui.format_money_md(float("nan")) == "n/a"
+
+
+def test_escape_dollars_leaves_no_bare_dollar() -> None:
+    """Dynamic text (a database error, say) is escaped before it hits Markdown."""
+    assert ui.escape_dollars("bind marker $name") == r"bind marker \$name"
+    assert ui.escape_dollars("no currency here") == "no currency here"
+    assert re.search(r"(?<!\\)\$", ui.escape_dollars("a $ b $ c")) is None
+
+
+#: Streamlit commands that render their argument as Markdown, and therefore
+#: parse a ``$...$`` pair as an inline LaTeX expression.
+_MARKDOWN_COMMANDS = frozenset(
+    {"markdown", "caption", "write", "info", "warning", "success", "error"}
+)
+
+
+def test_no_markdown_command_receives_unescaped_format_money() -> None:
+    """Guard the regression: money in a Markdown context must be escaped.
+
+    ``st.markdown`` and friends run their input through KaTeX, so two unescaped
+    ``$`` signs turn the prose between them into a formula — spaces are dropped
+    and ``;`` becomes a thin space. Every dashboard page is parsed here and any
+    ``ui.format_money(...)`` passed to a Markdown-rendering command is reported,
+    because that context has to use ``ui.format_money_md`` instead. Widgets that
+    do not parse Markdown (``st.metric``, ``st.column_config``, Altair titles)
+    keep the plain variant.
+    """
+    dashboard_dir = Path(ui.__file__).parent
+    offenders: list[str] = []
+
+    for path in sorted(dashboard_dir.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            is_markdown_command = (
+                isinstance(func, ast.Attribute)
+                and func.attr in _MARKDOWN_COMMANDS
+                and isinstance(func.value, ast.Name)
+                and func.value.id == "st"
+            )
+            if not is_markdown_command:
+                continue
+            for inner in ast.walk(node):
+                if isinstance(inner, ast.Attribute) and inner.attr == "format_money":
+                    offenders.append(
+                        f"{path.relative_to(dashboard_dir.parent.parent)}:{inner.lineno}"
+                    )
+
+    assert offenders == [], (
+        "ui.format_money() reaches a Markdown-rendering command; use "
+        f"ui.format_money_md() instead: {offenders}"
+    )
+
+
 def test_occupancy_column_config_types_ids_as_text() -> None:
     """The shared config renders ids as text, not as numbers.
 
     ``st.column_config.TextColumn`` returns a plain config dict, so the column
-    type is read from its ``type_config`` entry.
+    type is read from its ``type_config`` entry. The return type of
+    ``occupancy_column_config`` is a wide union of column-config TypedDicts, so
+    the frame is narrowed to a plain mapping before indexing into it.
     """
-    config = ui.occupancy_column_config()
+    config = cast("dict[str, Any]", ui.occupancy_column_config())
     assert config["listing_id"]["type_config"]["type"] == "text"
     assert config["host_id"]["type_config"]["type"] == "text"
     # Guard the regression: a number column would re-introduce the 2**53 error.

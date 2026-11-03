@@ -12,6 +12,31 @@ gap is given below.
 
 ---
 
+## Where the numbers come from
+
+The dashboard can be served by two engines, and both produce the figures in this
+document:
+
+| Engine | How it gets the data |
+| ------ | -------------------- |
+| PostgreSQL | `python -m src.pipeline` runs the ETL, then the dashboard reads `marts` |
+| DuckDB demo layer | `python -m scripts.build_demo_marts` runs the *same* SQL scripts in DuckDB and exports Parquet |
+
+The demo path is not a second implementation. It executes the same
+`sql/01..05_*.sql` files and the same vectorized normalizers, and the build
+script refuses to write the layer unless the four headline figures below match
+exactly. That check is also a test
+([`tests/test_backend.py`](../tests/test_backend.py:1)), so a drift between the
+two engines fails CI rather than reaching a reader.
+
+One deliberate difference: the demo layer narrows `raw.listings` to the `id`
+column and stores distinct listing ids for `staging.calendar`, because the only
+query that reads those layers (`sql/queries/data_quality.sql`) counts rows and
+joins on `listing_id`. The Data quality page therefore reports the same counts
+from both engines, but the demo layer does not carry the full raw payload.
+
+---
+
 ## Metric definitions
 
 | Metric | Formula | Where |

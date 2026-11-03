@@ -1,28 +1,36 @@
 """Data access for the occupancy dashboard.
 
 Every read goes through the pre-aggregated ``marts`` schema; the dashboard never
-touches the raw layer. The SQLAlchemy engine is a cached resource (one
-connection pool per Streamlit process) and each query is wrapped in
-``st.cache_data``, so switching pages or changing filters does not re-query
-Postgres on every rerun.
+touches the raw layer. The SQL itself lives in ``sql/queries/*.sql`` so the same
+statements can be run by hand with ``psql`` and reused outside the dashboard.
 
-The SQL itself lives in ``sql/queries/*.sql`` so the same statements can be run
-by hand with ``psql`` and reused outside the dashboard.
+The engine behind those statements is chosen at runtime by
+:mod:`src.dashboard.backend`: PostgreSQL when the pipeline has populated it,
+otherwise a DuckDB file built from the bundled Parquet snapshot. Both execute
+the same SQL files, so no query is duplicated. The backend is a cached resource
+(one connection per Streamlit process) and each query is wrapped in
+``st.cache_data``, so switching pages or changing filters does not re-query the
+engine on every rerun.
 """
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+import logging
 from pathlib import Path
-from typing import TypeAlias
 
 import numpy as np
 import pandas as pd
 import streamlit as st
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
 
 from src.config import get_config
+from src.dashboard.backend import (
+    BackendUnavailable,
+    QueryBackend,
+    SqlParamValue,
+    select_backend,
+)
+
+logger = logging.getLogger(__name__)
 
 #: Directory holding the reusable, dashboard-facing SQL queries.
 QUERIES_DIR = Path(__file__).resolve().parents[2] / "sql" / "queries"
@@ -30,14 +38,52 @@ QUERIES_DIR = Path(__file__).resolve().parents[2] / "sql" / "queries"
 #: Cache lifetime for query results.
 CACHE_TTL = "10m"
 
-#: Scalar values accepted as SQL bind parameters by :func:`run_query`.
-SqlParamValue: TypeAlias = str | bytes | date | timedelta | bool | int | float | None
+__all__ = [
+    "CACHE_TTL",
+    "GRANULARITIES",
+    "QUERIES_DIR",
+    "SqlParamValue",
+    "active_backend",
+    "add_granularity",
+    "add_period",
+    "aggregate_by_category",
+    "available_years",
+    "filter_granularity",
+    "get_backend",
+    "load_data_quality",
+    "load_host_segmentation",
+    "load_listings",
+    "load_neighbourhood_ranking",
+    "load_neighbourhoods",
+    "load_overall_kpis",
+    "load_price_vs_occupancy",
+    "load_revenue",
+    "load_room_types",
+    "load_seasonality",
+    "load_top_listings",
+    "run_query",
+]
 
 
-@st.cache_resource
-def get_engine() -> Engine:
-    """Return the process-wide SQLAlchemy engine for the configured database."""
-    return create_engine(get_config().database.url, pool_pre_ping=True)
+@st.cache_resource(show_spinner=False)
+def get_backend() -> QueryBackend | None:
+    """Return the process-wide query backend, or ``None`` when none is usable.
+
+    Returning ``None`` instead of raising keeps the pages in charge of the empty
+    state: they already render a "run the pipeline first" warning when a loader
+    comes back empty, which is exactly the right message when neither PostgreSQL
+    nor the DuckDB demo file is available.
+    """
+    try:
+        return select_backend(get_config())
+    except BackendUnavailable as exc:
+        logger.warning("No dashboard backend available: %s", exc)
+        return None
+
+
+def active_backend() -> QueryBackend | None:
+    """Return the active backend for display purposes (``None`` if unavailable)."""
+    return get_backend()
 
 
 @st.cache_data(ttl=CACHE_TTL, show_spinner=False)
@@ -52,10 +98,15 @@ def run_query(
         File stem of the SQL file, e.g. ``"overall_kpis"``.
     params:
         Optional bind parameters (e.g. ``{"limit": 20}``) for ``:name`` markers.
+
+    Returns an empty frame when no backend is available, so the caller's empty
+    state handles it. A genuine query error still propagates.
     """
+    backend = get_backend()
+    if backend is None:
+        return pd.DataFrame()
     sql = (QUERIES_DIR / f"{name}.sql").read_text(encoding="utf-8")
-    with get_engine().connect() as conn:
-        return pd.read_sql(text(sql), conn, params=params or {})
+    return backend.execute(sql, params)
 
 
 # ---------------------------------------------------------------------------
@@ -199,3 +250,65 @@ def available_years(*frames: pd.DataFrame) -> list[int]:
         if not frame.empty and "year" in frame.columns:
             years.update(int(y) for y in frame["year"].dropna().unique())
     return sorted(years)
+
+
+def aggregate_by_category(
+    df: pd.DataFrame,
+    *,
+    category_col: str,
+    value_col: str = "occupancy_rate",
+    weight_col: str = "total_nights",
+    booked_col: str = "booked_nights",
+    price_col: str = "avg_price_per_night",
+    listings_col: str = "total_listings",
+) -> pd.DataFrame:
+    """Aggregate a granularity-filtered frame by category, computing weighted metrics.
+
+    The marts store one row per (category, period). This function collapses across
+    periods so that each category appears once with:
+    - ``value_col`` recomputed as ``sum(booked_col) / sum(weight_col)`` (weighted rate)
+    - ``price_col`` as the mean of the period-level averages
+    - ``listings_col`` as the max across periods (stable identifier)
+
+    Parameters
+    ----------
+    df:
+        Frame already filtered to a single granularity (e.g. monthly rows only).
+    category_col:
+        Column to group by (``neighbourhood_cleansed`` or ``room_type``).
+    value_col:
+        Name of the rate column to recompute (default ``occupancy_rate``).
+    weight_col:
+        Denominator column for the weighted rate (default ``total_nights``).
+    booked_col:
+        Numerator column for the weighted rate (default ``booked_nights``).
+    price_col:
+        Price column to average (default ``avg_price_per_night``).
+    listings_col:
+        Listings column to take the max of (default ``total_listings``).
+
+    Returns
+    -------
+    DataFrame with one row per category and the aggregated columns.
+    """
+    if df.empty:
+        return df
+
+    required = {category_col, weight_col, booked_col}
+    if not required.issubset(df.columns):
+        missing = required - set(df.columns)
+        raise ValueError(f"Missing required columns for aggregation: {missing}")
+
+    agg_dict = {
+        weight_col: "sum",
+        booked_col: "sum",
+    }
+    optional = {}
+    if price_col in df.columns:
+        optional[price_col] = "mean"
+    if listings_col in df.columns:
+        optional[listings_col] = "max"
+
+    grouped = df.groupby(category_col, as_index=False).agg({**agg_dict, **optional})
+    grouped[value_col] = grouped[booked_col] / grouped[weight_col]
+    return grouped

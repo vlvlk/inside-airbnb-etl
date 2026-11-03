@@ -28,3 +28,9 @@ jobs:
           uv run --no-sync ruff check .
           uv run --no-sync pyright
           uv run --no-sync pytest
+
+      # The demo layer is committed, but rebuilding it here proves the build
+      # script still works from a clean checkout and still reproduces the
+      # figures in docs/methodology.md. It takes about a minute.
+      - name: Rebuild and verify the demo layer
+        run: uv run --no-sync python -m scripts.build_demo_marts --force

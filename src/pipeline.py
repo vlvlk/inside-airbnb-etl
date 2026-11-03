@@ -1,4 +1,4 @@
-"""Main ETL pipeline orchestration for Airbnb Occupancy Analytics."""
+"""Main ETL pipeline orchestration for Inside Airbnb ETL."""
 
 import argparse
 import logging
@@ -60,7 +60,7 @@ class ETLPipeline:
     def run_full_pipeline(self) -> None:
         """Run the complete ETL pipeline."""
         logger.info("=" * 50)
-        logger.info("Starting Airbnb Occupancy ETL Pipeline")
+        logger.info("Starting Inside Airbnb ETL Pipeline")
         logger.info("=" * 50)
 
         try:
@@ -88,7 +88,7 @@ class ETLPipeline:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Airbnb Occupancy ETL Pipeline")
+    parser = argparse.ArgumentParser(description="Inside Airbnb ETL Pipeline")
     parser.add_argument(
         "--config",
         "-c",

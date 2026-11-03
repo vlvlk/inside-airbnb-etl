@@ -87,10 +87,40 @@ def format_occupancy(value: float | None) -> str:
 
 
 def format_money(value: float | None, currency: str = "$") -> str:
-    """Format a monetary value with thousands separators."""
+    """Format a monetary value with thousands separators.
+
+    Use this for widgets that do **not** parse Markdown (``st.metric``,
+    ``st.column_config``, Altair titles). For anything that goes through
+    ``st.markdown``, ``st.write`` or ``st.caption`` use
+    :func:`format_money_md` instead.
+    """
     if value is None or pd.isna(value):
         return "n/a"
     return f"{currency}{value:,.0f}"
+
+
+def escape_dollars(text: str) -> str:
+    """Escape every ``$`` so Markdown does not read the text as LaTeX.
+
+    ``st.markdown`` and the other Markdown-rendering commands run their input
+    through KaTeX. A *pair* of ``$`` signs therefore opens an inline math
+    expression and everything between them is parsed as LaTeX: spaces are
+    dropped (``a night against`` -> ``anightagainst``), ``;`` becomes a thin
+    space and ``%`` starts a comment. Escaping the dollar signs keeps them
+    literal and leaves the surrounding prose intact.
+    """
+    return text.replace("$", r"\$")
+
+
+def format_money_md(value: float | None, currency: str = "$") -> str:
+    """Format money for Markdown/LaTeX contexts.
+
+    The plain :func:`format_money` is for widgets that do not parse Markdown
+    (``st.metric``, ``st.column_config``, Altair titles); this variant escapes
+    the currency symbol for anything that goes through ``st.markdown``,
+    ``st.write`` or ``st.caption``.
+    """
+    return escape_dollars(format_money(value, currency))
 
 
 #: Identifier columns. They are 64-bit integers in the warehouse, but their
@@ -125,7 +155,7 @@ def occupancy_trend_chart(df: pd.DataFrame, *, alt_text: str) -> alt.Chart:
         alt.Chart(df)
         .mark_line(point=True, strokeWidth=2)
         .encode(
-            x=alt.X("period:T", title=None),
+            x=alt.X("period:T", title=None, axis=alt.Axis(format="%b %Y")),
             y=alt.Y("occupancy_rate:Q", axis=OCCUPANCY_AXIS),
             tooltip=[
                 alt.Tooltip("period:T", title="Period", format="%b %Y"),
@@ -156,7 +186,7 @@ def revenue_trend_chart(df: pd.DataFrame, *, alt_text: str) -> alt.Chart:
         alt.Chart(melted)
         .mark_line(point=True, strokeWidth=2)
         .encode(
-            x=alt.X("period:T", title=None),
+            x=alt.X("period:T", title=None, axis=alt.Axis(format="%b %Y")),
             y=alt.Y("value:Q", title="Price per night ($)"),
             color=alt.Color("metric:N", title=None, legend=alt.Legend(orient="bottom")),
             tooltip=[

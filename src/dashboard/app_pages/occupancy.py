@@ -25,6 +25,12 @@ nbh = ui.apply_year_filter(nbh, selected_years)
 rooms = data.filter_granularity(room_types, granularity)
 rooms = ui.apply_year_filter(rooms, selected_years)
 
+# Aggregate by category so each neighbourhood/room-type appears once with
+# a weighted occupancy rate (sum of booked_nights / sum of total_nights)
+# instead of individual period rows.
+nbh_agg = data.aggregate_by_category(nbh, category_col="neighbourhood_cleansed")
+rooms_agg = data.aggregate_by_category(rooms, category_col="room_type")
+
 # ---------------------------------------------------------------------------
 # Neighbourhood vs. room type
 # ---------------------------------------------------------------------------
@@ -32,12 +38,12 @@ rooms = ui.apply_year_filter(rooms, selected_years)
 row = st.columns(2)
 with row[0], st.container(border=True):
     st.subheader("Top neighbourhoods by occupancy")
-    if nbh.empty:
+    if nbh_agg.empty:
         ui.render_empty_state("No neighbourhood data for the current filters.")
     else:
         st.altair_chart(
             ui.ranking_bar_chart(
-                nbh,
+                nbh_agg,
                 category_col="neighbourhood_cleansed",
                 value_col="occupancy_rate",
                 alt_text="Neighbourhood occupancy ranking",
@@ -47,12 +53,12 @@ with row[0], st.container(border=True):
 
 with row[1], st.container(border=True):
     st.subheader("Occupancy by room type")
-    if rooms.empty:
+    if rooms_agg.empty:
         ui.render_empty_state("No room-type data for the current filters.")
     else:
         st.altair_chart(
             ui.ranking_bar_chart(
-                rooms,
+                rooms_agg,
                 category_col="room_type",
                 value_col="occupancy_rate",
                 alt_text="Room-type occupancy ranking",

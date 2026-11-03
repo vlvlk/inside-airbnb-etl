@@ -1,4 +1,4 @@
-# Airbnb Occupancy Pipeline Configuration
+# Inside Airbnb ETL Configuration
 #
 # This is the primary declarative configuration file: edit values here.
 # Precedence (highest first): CLI/init args > environment variables > .env > this file > code defaults.
@@ -19,6 +19,17 @@ data:
   # instead — the extractor is chosen from the extension.
   listings_file: listings.parquet
   calendar_file: calendar.parquet
+
+dashboard:
+  # Where the Streamlit dashboard reads its marts from:
+  #   auto     -> PostgreSQL if reachable, otherwise the Parquet demo layer
+  #   postgres -> PostgreSQL only (the production path)
+  #   duckdb   -> the Parquet demo layer only (no database server needed)
+  # The demo layer is a directory of Parquet files built from the committed
+  # snapshot by scripts/build_demo_marts.py, so a fresh clone can serve the
+  # dashboard without running the 8M-row load first.
+  source: auto
+  demo_dir: data/demo
 
 pipeline:
   # Rows handed to the loader per COPY/INSERT (bounded memory per batch).

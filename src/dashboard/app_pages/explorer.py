@@ -38,7 +38,10 @@ sql = (data.QUERIES_DIR / f"{query_name}.sql").read_text(encoding="utf-8")
 try:
     df = data.run_query(query_name)
 except Exception as exc:  # noqa: BLE001 - surface DB errors to the user
-    st.error(f"Query failed: {exc}", icon=":material/error:")
+    # The message comes from the database and may contain '$' (a bind marker in
+    # a DuckDB error, for instance). ``st.error`` renders Markdown, so a pair of
+    # them would turn the diagnostic into a LaTeX expression.
+    st.error(f"Query failed: {ui.escape_dollars(str(exc))}", icon=":material/error:")
     st.stop()
 
 with st.container(border=True):

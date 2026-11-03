@@ -24,6 +24,8 @@ ENV_ALIASES = (
     "POSTGRES_USER",
     "POSTGRES_PASSWORD",
     "DATA_PATH",
+    "DASHBOARD_SOURCE",
+    "DASHBOARD_DEMO_DIR",
     "BATCH_SIZE",
     "CHUNK_SIZE",
     "VALIDATE_DATA",
@@ -55,6 +57,9 @@ database:
   name: yaml-db
 data:
   data_path: ./yaml-data
+dashboard:
+  source: duckdb
+  demo_dir: ./yaml-demo
 pipeline:
   batch_size: 777
 logging:
@@ -75,6 +80,8 @@ class TestYamlLoading:
         assert config.database.port == 1111
         assert config.database.name == "yaml-db"
         assert config.data.data_path == Path("./yaml-data")
+        assert config.dashboard.source == "duckdb"
+        assert config.dashboard.demo_path == Path("./yaml-demo")
         assert config.pipeline.batch_size == 777
         assert config.logging.level == "WARNING"
 
