@@ -5,12 +5,14 @@ writes two artefacts per page and theme:
 
 ``<theme>/<page>.png``
     A **hero** frame: exactly one viewport (1600x1000 CSS px at 2x, so
-    3200x2000). This is what the README embeds, because a full-page shot of a
-    dense dashboard is unreadable once GitHub scales it down to ~880 px wide.
+    3200x2000). This is what the README and ``docs/dashboard.md`` embed, because
+    a full-page shot of a dense dashboard is unreadable once GitHub scales it
+    down to ~880 px wide.
 
 ``<theme>/full/<page>.png``
-    The whole page, top to bottom. Kept for the archive and linked from the
-    README, where a reader can click through when they want the detail.
+    The whole page, top to bottom. Kept for the archive and linked from
+    ``docs/dashboard.md``, where a reader can click through when they want the
+    detail.
 
 Streamlit is started separately, so the dashboard can be served by either
 engine (PostgreSQL or the Parquet demo layer) without this script caring::
@@ -47,6 +49,7 @@ cannot slip into the README.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import pathlib
 import re
 import struct
@@ -67,6 +70,7 @@ class ViewportSize(TypedDict):
 
     width: int
     height: int
+
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 DEFAULT_OUT = REPO_ROOT / "docs" / "screenshots"
@@ -179,10 +183,8 @@ def settle(page: BrowserPage, *, timeout_ms: int = 60_000) -> None:
     )
     # Charts are the slow part of a rerun. Pages without any chart (the SQL
     # explorer on a cold cache) are fine, so a timeout here is not fatal.
-    try:
+    with contextlib.suppress(PlaywrightError):
         page.wait_for_selector("[data-testid='stVegaLiteChart']", timeout=15_000)
-    except PlaywrightError:
-        pass
     page.wait_for_load_state("networkidle")
     # Let Vega finish its final paint after the last DOM mutation.
     page.wait_for_timeout(2_000)
@@ -250,7 +252,9 @@ def shoot(
         for theme in themes:
             label = THEMES[theme]
             for mode in modes:
-                out_dir = out_root / theme if mode == "hero" else out_root / theme / "full"
+                out_dir = (
+                    out_root / theme if mode == "hero" else out_root / theme / "full"
+                )
                 out_dir.mkdir(parents=True, exist_ok=True)
 
                 # A fresh context per (theme, mode): ``color_scheme`` drives
@@ -371,9 +375,7 @@ def main(argv: list[str] | None = None) -> int:
     unknown = [t for t in requested if t not in THEMES]
     if unknown:
         raise SystemExit(f"unknown theme(s): {', '.join(unknown)}")
-    themes: tuple[ThemeSlug, ...] = tuple(
-        t for t in requested if t in THEMES
-    )  # type: ignore[assignment]
+    themes: tuple[ThemeSlug, ...] = tuple(t for t in requested if t in THEMES)  # type: ignore[assignment]
 
     selected = tuple(s.strip() for s in args.only.split(",") if s.strip())
     pages = PAGES

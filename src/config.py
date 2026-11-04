@@ -190,8 +190,8 @@ class DataSettings(SectionSettings):
     yaml_section: ClassVar[str] = "data"
 
     data_path: Path = Field(default=Path("./data"), alias="DATA_PATH")
-    # The bundled snapshot is Parquet (see README); these defaults must match
-    # ``configs/config.yaml`` so a config-less run behaves identically.
+    # The bundled snapshot is Parquet (see docs/schema.md); these defaults must
+    # match ``configs/config.yaml`` so a config-less run behaves identically.
     listings_file: str = "listings.parquet"
     calendar_file: str = "calendar.parquet"
 

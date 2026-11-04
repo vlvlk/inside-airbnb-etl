@@ -49,7 +49,7 @@ coverage.xml
 configs/.env
 
 # ---------------------------------------------------------------------------
-# Data — the bundled Toronto snapshot lives in git as Parquet (see README).
+# Data — the bundled Toronto snapshot lives in git as Parquet (see docs/setup.md).
 # Everything else under data/ is reproducible and never versioned.
 # ---------------------------------------------------------------------------
 data/raw/*

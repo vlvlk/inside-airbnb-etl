@@ -17,7 +17,14 @@ from src.dashboard.data import GRANULARITIES
 CHART_HEIGHT = 320
 
 #: Occupancy is stored as a fraction in [0, 1]; charts show it as a percentage.
-OCCUPANCY_AXIS = alt.Axis(format="%", title="Occupancy rate")
+#: Explicit tick values pin the gridlines to whole 5-point steps
+#: (0%, 5%, 10%, ...). ``tickMinStep`` alone is not enough: Vega-Lite still
+#: picked a 2-point step for the ranking charts, so the axis labels ran
+#: 0%, 2%, 4%, ... instead of the readable 5-point grid.
+OCCUPANCY_TICKS: tuple[float, ...] = tuple(i / 20 for i in range(21))
+OCCUPANCY_AXIS = alt.Axis(
+    format="%", values=list(OCCUPANCY_TICKS), title="Occupancy rate"
+)
 
 #: Host-portfolio segments in the order they should read on a chart.
 HOST_SEGMENT_ORDER: tuple[str, ...] = (

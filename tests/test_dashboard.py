@@ -366,6 +366,36 @@ def test_grouped_bar_chart_encodes_category_and_group() -> None:
     assert encoding["y"]["field"] == "occupancy_rate"
 
 
+def test_occupancy_axis_pins_five_point_ticks() -> None:
+    """The occupancy gridlines step by whole 5 points, not by Vega-Lite's guess.
+
+    ``tickMinStep`` alone did not stop Vega-Lite from picking a 2-point step
+    (0%, 2%, 4%, ...) on the ranking charts, so the axis carries explicit tick
+    values. That keeps every occupancy chart on the same readable 5-point grid.
+    """
+    axis = ui.OCCUPANCY_AXIS.to_dict()
+    assert axis["format"] == "%"
+    assert axis["values"] == [i / 20 for i in range(21)]
+
+
+def test_ranking_bar_chart_uses_the_occupancy_axis() -> None:
+    """The ranking builder must inherit the shared 5-point step on its value axis."""
+    df = pd.DataFrame(
+        {
+            "neighbourhood_cleansed": ["A", "B"],
+            "occupancy_rate": [0.6, 0.45],
+        }
+    )
+    chart = ui.ranking_bar_chart(
+        df,
+        category_col="neighbourhood_cleansed",
+        value_col="occupancy_rate",
+        alt_text="Neighbourhood occupancy ranking",
+    ).to_dict()
+
+    assert chart["encoding"]["x"]["axis"]["values"] == [i / 20 for i in range(21)]
+
+
 def test_load_host_segmentation_delegates_to_query(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

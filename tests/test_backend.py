@@ -236,7 +236,7 @@ def test_every_demo_file_has_an_export_projection() -> None:
 def test_demo_layer_reproduces_documented_figures() -> None:
     """The demo layer must land on the numbers in ``docs/methodology.md``.
 
-    Occupancy and revenue are the two headline figures the README quotes, so a
+    Occupancy and revenue are the two headline figures the project quotes, so a
     drift here means the demo no longer represents the pipeline's output.
     """
     backend = DuckDbBackend(DEMO_DIR)
