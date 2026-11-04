@@ -351,10 +351,13 @@ inside-airbnb-etl/
 │   ├── raw/                      # Bundled Toronto snapshot (Parquet, committed)
 │   └── demo/                     # Parquet demo layer for the no-DB dashboard
 ├── docs/
-│   └── methodology.md            # Metric definitions and measured limitations
+│   ├── methodology.md            # Metric definitions and measured limitations
+│   └── screenshots/              # Committed dashboard shots: <theme>/<page>.png
+│                                 # (hero) and <theme>/full/<page>.png (full page)
 ├── scripts/
 │   ├── csv_to_parquet.py         # Rebuild the artifacts from csv.gz downloads
-│   └── build_demo_marts.py       # Build the demo layer (DuckDB -> Parquet)
+│   ├── build_demo_marts.py       # Build the demo layer (DuckDB -> Parquet)
+│   └── shoot_dashboard.py        # Screenshot every page, both themes, hero + full
 ├── docker/
 │   ├── Dockerfile                # Application container
 │   └── docker-compose.yml        # PostgreSQL + app services
@@ -475,6 +478,65 @@ query results with `@st.cache_data`, and keeps a single connection per process
 via `@st.cache_resource`. The Data quality page reads the raw and staging layers
 on purpose: a quality check has to compare layers. The theme lives in
 [`.streamlit/config.toml`](.streamlit/config.toml:1).
+
+#### Screenshots
+
+Every page is captured in both themes at 2× device scale, in two frames:
+
+- **hero** — `docs/screenshots/<theme>/<page>.png`, a 1600×1000 viewport shot
+  with the Streamlit chrome (header, toolbar, "Running…" pill, deploy button,
+  element toolbars) hidden. This is the portfolio frame.
+- **full** — `docs/screenshots/<theme>/full/<page>.png`, the whole scrollable
+  page, taken after unfolding the app shell so nothing is clipped.
+
+**Insights**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/insights.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/light/insights.png">
+  <img alt="Insights page: headline findings, each with its chart" src="docs/screenshots/light/insights.png">
+</picture>
+
+**Overview**
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dark/overview.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/light/overview.png">
+  <img alt="Overview page: portfolio KPIs, occupancy/ADR/RevPAR trends, seasonality" src="docs/screenshots/light/overview.png">
+</picture>
+
+The remaining pages (`occupancy`, `revenue`, `data-quality`, `sql-explorer`)
+follow the same `<theme>/<page>.png` (hero) and `<theme>/full/<page>.png`
+(full page) naming:
+
+| Page | Light | Dark |
+| ---- | ----- | ---- |
+| Occupancy | [`light/occupancy.png`](docs/screenshots/light/occupancy.png:1) | [`dark/occupancy.png`](docs/screenshots/dark/occupancy.png:1) |
+| Revenue | [`light/revenue.png`](docs/screenshots/light/revenue.png:1) | [`dark/revenue.png`](docs/screenshots/dark/revenue.png:1) |
+| Data quality | [`light/data-quality.png`](docs/screenshots/light/data-quality.png:1) | [`dark/data-quality.png`](docs/screenshots/dark/data-quality.png:1) |
+| SQL explorer | [`light/sql-explorer.png`](docs/screenshots/light/sql-explorer.png:1) | [`dark/sql-explorer.png`](docs/screenshots/dark/sql-explorer.png:1) |
+
+Full-page versions for every page: [`light/full`](docs/screenshots/light/full) ·
+[`dark/full`](docs/screenshots/dark/full).
+
+Regenerate the whole set with the app running:
+
+```bash
+pip install playwright && playwright install chromium
+streamlit run src/dashboard/app.py --server.port 8501 --server.headless true &
+python scripts/shoot_dashboard.py                                # hero + full, light + dark
+python scripts/shoot_dashboard.py --mode hero --only overview    # one page, one frame
+```
+
+[`scripts/shoot_dashboard.py`](scripts/shoot_dashboard.py:1) drives a headless
+Chromium over the app. It applies the theme the same way the UI does (a fresh
+browser context plus the per-page `stActiveTheme-<pathname>-v2` entry in
+`localStorage`) and verifies that the rendered background luminance really
+matches the requested theme, hides the Streamlit chrome, scrolls through the
+page so every chart mounts, then writes the hero and full frames. `--only`
+limits a run to a comma-separated list of page slugs and `--keep-chrome` keeps
+the header for debugging. It talks to whatever engine is serving the dashboard,
+so the PostgreSQL and demo-layer paths produce the same images.
 
 ### Two data sources, one set of queries
 
