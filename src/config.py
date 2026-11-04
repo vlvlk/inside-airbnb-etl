@@ -252,6 +252,11 @@ class PipelineSettings(SectionSettings):
     validate_data: bool = Field(default=True, alias="VALIDATE_DATA")
     skip_invalid_rows: bool = Field(default=False, alias="SKIP_INVALID_ROWS")
     use_copy: bool = Field(default=True, alias="USE_COPY")
+    # A full run is a *replace*, not a merge: the raw/staging/marts tables are
+    # truncated before the load so rows that are absent from the new snapshot
+    # (e.g. the previous city) cannot survive the upsert and leak into the
+    # marts. Set false only for a deliberate incremental append.
+    replace_on_load: bool = Field(default=True, alias="REPLACE_ON_LOAD")
 
 
 class LoggingSettings(SectionSettings):
@@ -297,7 +302,9 @@ class AppConfig(BaseSettings):
             ),
             dashboard=DashboardSettings(
                 _yaml_file=yaml_file,  # type: ignore[call-arg]
-                **translate_overrides(DashboardSettings, overrides.get("dashboard", {})),
+                **translate_overrides(
+                    DashboardSettings, overrides.get("dashboard", {})
+                ),
             ),
             pipeline=PipelineSettings(
                 _yaml_file=yaml_file,  # type: ignore[call-arg]

@@ -1,5 +1,5 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
 ![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
@@ -8,20 +8,21 @@
 # Inside Airbnb ETL
 
 An end-to-end analytics project over the Inside Airbnb snapshot for **Toronto,
-Canada (2026-09-17 → 2027-09-17)**: a SQL ETL pipeline loads 22,050 listings and
-8.0M calendar nights into PostgreSQL, and a Streamlit dashboard turns them into
-occupancy and revenue insights.
+Canada**: listings scraped 2026-09-16, calendar covering 2026-09-17 → 2027-09-17.
+A SQL ETL pipeline loads 22,050 listings and 8.0M calendar nights into
+PostgreSQL, and a Streamlit dashboard turns them into occupancy and revenue
+insights.
 
 ## TL;DR
 
-**The question.** What actually drives occupancy in the Toronto short-term rental
-market, and what should a host do about it?
+**The question.** The project measures what drives occupancy in the Toronto
+short-term rental market, and what a host can act on.
 
 **The five findings** (each is recomputed from the data and shown with its chart
 on the [Insights](#dashboard-streamlit) page):
 
 1. **Demand is strongly seasonal.** Occupancy runs from **37.8%** in February to
-   **63.2%** in September — a 25-point swing across the year.
+   **63.2%** in September, a 25-point swing across the year.
 2. **Single-listing hosts beat professionals.** Hosts with one listing fill
    **54.3%** of nights at **$294** ADR; hosts with five or more fill **37.1%** at
    **$174**. Scale does not buy occupancy here.
@@ -29,20 +30,20 @@ on the [Insights](#dashboard-streamlit) page):
    **$296**/night; private rooms fill **44.7%** at **$117**/night. The price gap
    (2.5x) is far wider than the occupancy gap.
 4. **Lower prices are associated with higher occupancy.** The price↔occupancy
-   correlation is **−0.23** across room types and months — negative.
+   correlation is **−0.23** across room types and months: negative.
 5. **Location is the biggest lever.** The best neighbourhood fills **67.6%** of
-   nights, the worst **22.8%** — a 45-point spread inside one city.
+   nights, the worst **22.8%**: a 45-point spread inside one city.
 
-**The caveats** (measured, not hand-waved — see [`docs/methodology.md`](docs/methodology.md:1)):
+**The caveats** (measured, not hand-waved; see [`docs/methodology.md`](docs/methodology.md:1)):
 
-- **Occupancy is an upper bound.** "Unavailable" ≠ "booked": hosts also block
-  nights by hand. This pipeline reports 47.4%; Inside Airbnb's own estimate is
-  19.9%, and the two correlate at −0.02. Treat 47.4% as a ceiling.
+- **Occupancy is an upper bound.** “Unavailable” is not “booked”: hosts also
+  block nights by hand. This pipeline reports 47.4%; Inside Airbnb’s own estimate
+  is 19.9%, and the two correlate at −0.02. Treat 47.4% as a ceiling.
 - **Revenue is estimated from a static price.** The calendar snapshot has no
-  per-night price, so every night is valued at the listing's single scraped
+  per-night price, so every night is valued at the listing’s single scraped
   price (visible as a flat $201.88 across all months). Read `total_revenue` as an
   upper-bound estimate.
-- **Two "average prices" coexist.** `avg_price_per_night` (all nights) and ADR
+- **Two “average prices” coexist.** `avg_price_per_night` (all nights) and ADR
   (booked nights only) are different quantities and are not interchangeable.
 - **The staging layer keeps stale rows.** 15,382 listings from earlier snapshots
   survive the upsert; they never reach a metric (the marts join through the
@@ -57,16 +58,16 @@ on each run.
 
 ```mermaid
 flowchart LR
-    subgraph Ingestion [Сбор]
+    subgraph Ingestion [Ingestion]
         CSV[Raw CSV] -->|pandas / COPY| Raw[(Postgres Raw)]
     end
 
-    subgraph dbt_or_SQL [Трансформация]
+    subgraph Transform [Transformation]
         Raw -->|SQL CTE| Stg[(Staging Cleaned)]
         Stg -->|SQL CTE| Marts[(Marts Aggregates)]
     end
 
-    subgraph Consumption [Потребление]
+    subgraph Consumption [Consumption]
         Marts --> BI[Streamlit / BI]
     end
 ```
@@ -89,7 +90,9 @@ The raw load is tuned for large inputs (hundreds of MB of calendar rows):
 - Set `pipeline.use_copy: false` to fall back to the row-wise `INSERT` path if
   the database user lacks `COPY` privileges.
 
-Measured on the bundled dataset (8.0M calendar rows, 330 MB of CSV):
+Measured on the bundled dataset (8.0M calendar rows, 330 MB of uncompressed
+CSV) on the author’s machine, so treat the figures as orders of magnitude rather
+than a reproducible benchmark:
 
 | Stage | Before | After | Speed-up |
 |-------|--------|-------|----------|
@@ -108,11 +111,11 @@ Measured on the bundled dataset (8.0M calendar rows, 330 MB of CSV):
 
 - **Occupancy Rate** = `booked_nights / total_nights` (a fraction in `[0, 1]`).
   `booked_nights` counts every night flagged unavailable, so this is an upper
-  bound — see [`docs/methodology.md`](docs/methodology.md:1).
+  bound; see [`docs/methodology.md`](docs/methodology.md:1).
 - **ADR (Average Daily Rate)** = Average price per booked night
 - **RevPAR (Revenue Per Available Room)** = Total revenue / available nights
 
-Revenue is estimated from each listing's single scraped price (the calendar
+Revenue is estimated from each listing’s single scraped price (the calendar
 snapshot carries no per-night price), so ADR, RevPAR and total revenue are
 estimates over the priced subset of listings. The measured size of each gap is in
 [`docs/methodology.md`](docs/methodology.md:1).
@@ -124,24 +127,24 @@ Calculated at multiple granularities:
 - By room type
 - By time period (year, month, week, quarter)
 
-## Quick Start
+## Getting started
 
 The Toronto snapshot ships with the repository as Parquet
 (`data/raw/listings.parquet`, `data/raw/calendar.parquet`, ~9.5 MB total), so a
 fresh clone runs end to end with **no download step and no network access**.
 
-### Just want to see the dashboard?
+### Run the dashboard without a database
 
 No database, no Docker, no 8M-row load:
 
 ```bash
-pip install -e .
+uv sync
 streamlit run src/dashboard/app.py
 ```
 
 The dashboard reads a committed Parquet demo layer (`data/demo/`, ~14 MB) built
 from the same snapshot. Every query, chart and metric is the same one the
-PostgreSQL path produces — the SQL files in `sql/queries/` are shared, and the
+PostgreSQL path produces: the SQL files in `sql/queries/` are shared, and the
 build script verifies the demo layer against the figures in
 [`docs/methodology.md`](docs/methodology.md:1) before writing it. The sidebar
 shows a **Demo data** badge so it is always clear which source is live.
@@ -172,25 +175,24 @@ the ETL step, start the `app` service on its own:
 docker-compose -f docker/docker-compose.yml up --build app
 ```
 
-> **Restarting the dashboard re-runs the whole ETL.** `docker compose up
-> dashboard` also starts the `app` dependency, and the dashboard waits for it
-> with `condition: service_completed_successfully`. Compose therefore reloads all
-> 8.0M calendar rows (~7 minutes) before the dashboard comes back, which looks
-> like a hang but is a full reload. When the mart data is already loaded and only
-> the dashboard code changed, skip the dependency:
->
-> ```bash
-> docker compose -f docker/docker-compose.yml up -d --no-deps --build dashboard
-> ```
->
-> This rebuilds and restarts only the dashboard container and leaves the loaded
-> database untouched.
+**Restarting the dashboard re-runs the whole ETL.** `docker compose up dashboard`
+also starts the `app` dependency, because the dashboard waits for it with
+`condition: service_completed_successfully`. Compose therefore reloads all 8.0M
+calendar rows (~7 minutes) before the dashboard comes back, which looks like a
+hang but is a full reload. When the mart data is already loaded and only the
+dashboard code changed, skip the dependency:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d --no-deps --build dashboard
+```
+
+This rebuilds and restarts only the dashboard container and leaves the loaded database untouched.
 
 ### Local Development
 
 ```bash
 # 1. Install dependencies
-pip install -e ".[dev]"
+uv sync --extra dev
 
 # 2. Start PostgreSQL
 docker-compose -f docker/docker-compose.yml up -d postgres
@@ -208,8 +210,8 @@ cp configs/.env.example .env
 ### Bundled dataset
 
 The committed artifacts come from the Inside Airbnb snapshot for **Toronto,
-Canada, 2026-09-16**
-([source](https://insideairbnb.com/get-the-data)):
+Canada**: listings scraped **2026-09-16**, calendar covering **2026-09-17 →
+2027-09-17** ([source](https://insideairbnb.com/get-the-data)):
 
 | File | Rows | Columns | Size |
 | ------ | ------ | --------- | ------ |
@@ -229,6 +231,31 @@ python scripts/csv_to_parquet.py
 python scripts/csv_to_parquet.py --listings /tmp/listings.csv.gz --calendar /tmp/calendar.csv.gz
 ```
 
+A full pipeline run **replaces** the loaded snapshot: `raw`, `staging` and
+`marts` are truncated before the load, so a listing that disappeared from the
+source — or every row of a previous city — cannot survive the upsert and leak
+into the dashboard. This is controlled by `pipeline.replace_on_load`
+(`REPLACE_ON_LOAD`), on by default; set it to `false` only for a deliberate
+incremental append.
+
+The dashboard reads PostgreSQL when it is reachable and falls back to the
+committed Parquet demo layer otherwise (`dashboard.source: auto`). The demo
+layer is a static artifact built from one snapshot, so after switching to a new
+city rebuild it locally to match:
+
+```bash
+python -m scripts.build_demo_marts --force
+```
+
+The build verifies the result against the Toronto figures in
+[`docs/methodology.md`](docs/methodology.md:1) and refuses to write a layer that
+does not reproduce them. When the demo layer is built from a *different* city,
+pass `--no-verify` so the build skips that snapshot-specific check:
+
+```bash
+python -m scripts.build_demo_marts --force --no-verify
+```
+
 The same snapshot is also published on
 [Kaggle](https://www.kaggle.com/datasets/vladimirkondratev/inside-airbnb-toronto-sep-2026/)
 if you prefer downloading it from there. The extractor is chosen from the
@@ -244,7 +271,7 @@ through an explicit precedence chain, highest priority first:
 1. CLI / init arguments (`--config`, `AppConfig(..., database={...})`)
 2. process environment variables
 3. `.env` file
-4. `configs/config.yaml` — the primary declarative file
+4. `configs/config.yaml`: the primary declarative file
 5. defaults declared in the code
 
 Unknown keys in `config.yaml` raise an error, so typos surface immediately
@@ -263,7 +290,7 @@ database:
   password: airbnb
 
 data:
-  data_path: ./data          # raw/ and processed/ are derived from this
+  data_path: ./data                 # raw/ and processed/ are derived from this
   listings_file: listings.parquet   # .csv / .csv.gz also work
   calendar_file: calendar.parquet
 
@@ -315,56 +342,58 @@ LOG_LEVEL=INFO
 
 ## Project Structure
 
-```
+```bash
 inside-airbnb-etl/
 ├── configs/
-│   ├── config.yaml          # Pipeline configuration
-│   └── .env.example         # Environment variables template
+│   ├── config.yaml               # Pipeline configuration
+│   └── .env.example              # Environment variables template
 ├── data/
-│   ├── raw/                 # Bundled Toronto snapshot (Parquet, committed)
-│   └── demo/                # Parquet demo layer for the no-DB dashboard
+│   ├── raw/                      # Bundled Toronto snapshot (Parquet, committed)
+│   └── demo/                     # Parquet demo layer for the no-DB dashboard
 ├── docs/
-│   └── methodology.md       # Metric definitions and measured limitations
+│   └── methodology.md            # Metric definitions and measured limitations
 ├── scripts/
-│   ├── csv_to_parquet.py    # Rebuild the artifacts from csv.gz downloads
-│   └── build_demo_marts.py  # Build the demo layer (DuckDB -> Parquet)
+│   ├── csv_to_parquet.py         # Rebuild the artifacts from csv.gz downloads
+│   └── build_demo_marts.py       # Build the demo layer (DuckDB -> Parquet)
 ├── docker/
-│   ├── Dockerfile           # Application container
-│   └── docker-compose.yml   # PostgreSQL + app services
+│   ├── Dockerfile                # Application container
+│   └── docker-compose.yml        # PostgreSQL + app services
 ├── sql/
-│   ├── 01_ddl_raw.sql       # Raw layer schema
-│   ├── 02_ddl_staging.sql   # Staging layer schema
-│   ├── 03_ddl_marts.sql     # Marts layer schema
+│   ├── 01_ddl_raw.sql            # Raw layer schema
+│   ├── 02_ddl_staging.sql        # Staging layer schema
+│   ├── 03_ddl_marts.sql          # Marts layer schema
 │   ├── 04_transform_staging.sql  # Raw → Staging
 │   ├── 05_transform_marts.sql    # Staging → Marts
-│   └── queries/             # Reusable analytics queries (dashboard + psql)
+│   └── queries/                  # Reusable analytics queries (dashboard + psql)
 ├── src/
-│   ├── config.py            # Configuration management
+│   ├── config.py                 # Configuration management
 │   ├── models/
-│   │   ├── listing.py       # Listing Pydantic models
-│   │   └── calendar.py      # Calendar Pydantic models
+│   │   ├── listing.py            # Listing Pydantic models
+│   │   └── calendar.py           # Calendar Pydantic models
 │   ├── extract/
-│   │   ├── base.py          # Shared validation/batching logic
-│   │   ├── csv_extractor.py # Chunked CSV extraction
-│   │   ├── parquet_extractor.py # Row-group Parquet extraction
-│   │   └── normalize.py     # Vectorized pandas normalization
+│   │   ├── base.py               # Shared validation/batching logic
+│   │   ├── csv_extractor.py      # Chunked CSV extraction
+│   │   ├── parquet_extractor.py  # Row-group Parquet extraction
+│   │   └── normalize.py          # Vectorized pandas normalization
 │   ├── load/
-│   │   └── postgres_loader.py # PostgreSQL COPY-based bulk loading
-│   ├── dashboard/           # Streamlit dashboard over the marts schema
-│   │   ├── app.py           # Dashboard entry point (st.navigation)
-│   │   ├── backend.py       # QueryBackend: PostgreSQL or DuckDB + dialect adapter
-│   │   ├── data.py          # Cached query access + granularity helpers
-│   │   ├── ui.py            # Sidebar filters, formatting, Altair charts
-│   │   └── app_pages/       # Insights, Overview, Occupancy, Revenue, Data quality, SQL explorer
-│   └── pipeline.py          # Main ETL orchestration
+│   │   └── postgres_loader.py    # PostgreSQL COPY-based bulk loading
+│   ├── dashboard/                # Streamlit dashboard over the marts schema
+│   │   ├── app.py                # Dashboard entry point (st.navigation)
+│   │   ├── backend.py            # QueryBackend: PostgreSQL or DuckDB + dialect adapter
+│   │   ├── data.py               # Cached query access + granularity helpers
+│   │   ├── ui.py                 # Sidebar filters, formatting, Altair charts
+│   │   └── app_pages/            # Insights, Overview, Occupancy, Revenue, Data quality, SQL explorer
+│   └── pipeline.py               # Main ETL orchestration
 ├── .streamlit/
-│   └── config.toml          # Dashboard theme (light/dark)
+│   └── config.toml               # Dashboard theme (light/dark)
 ├── tests/
-│   ├── test_models.py       # Pydantic model tests
-│   ├── test_extract.py      # Extraction tests
-│   ├── test_dashboard.py    # Dashboard data-helper tests
-│   └── test_backend.py      # Backend selection, dialect adapter, demo-layer parity
-├── pyproject.toml           # Project metadata & dependencies
+│   ├── test_models.py            # Pydantic model tests
+│   ├── test_normalize.py         # Vectorized normalization tests
+│   ├── test_extract.py           # Extraction tests
+│   ├── test_config.py            # Config precedence and validation tests
+│   ├── test_dashboard.py         # Dashboard data-helper tests
+│   └── test_backend.py           # Backend selection, dialect adapter, demo-layer parity
+├── pyproject.toml                # Project metadata & dependencies
 └── README.md
 ```
 
@@ -428,16 +457,9 @@ marts.v_occupancy_summary          -- Overall summary view
 
 ### Dashboard (Streamlit)
 
-The repository ships a read-only Streamlit dashboard over the `marts` schema —
-the fastest way to explore the processed data without writing SQL.
-
-```bash
-# Run the pipeline once, then start the dashboard
-python -m src.pipeline
-streamlit run src/dashboard/app.py
-```
-
-Pages:
+The repository ships a read-only Streamlit dashboard over the `marts` schema,
+the fastest way to explore the processed data without writing SQL. Start it with
+the two commands in [Local Development](#local-development). The pages are:
 
 | Page | Contents |
 | ------ | ---------- |
@@ -446,12 +468,12 @@ Pages:
 | **Occupancy** | Neighbourhood and room-type rankings, price-vs-occupancy scatter, neighbourhood leaderboard |
 | **Revenue** | ADR/RevPAR trend, top listings by RevPAR, revenue KPIs |
 | **Data quality** | Layer counts and data quality checks (ghost listings, missing prices, dropped rows) with an explanation of each |
-| **SQL explorer** | Runs any saved query and shows the SQL for copy-paste into `psql` |
+| **SQL explorer** | Runs any saved query and shows the SQL for copy-paste into `psql` (substitute any `:name` bind marker first) |
 
 The dashboard reads the pre-aggregated marts only (never the raw layer), caches
 query results with `@st.cache_data`, and keeps a single connection per process
 via `@st.cache_resource`. The Data quality page reads the raw and staging layers
-on purpose — a quality check has to compare layers. The theme lives in
+on purpose: a quality check has to compare layers. The theme lives in
 [`.streamlit/config.toml`](.streamlit/config.toml:1).
 
 ### Two data sources, one set of queries
@@ -468,11 +490,11 @@ The engine is the only thing that varies. Both paths execute the same
 [`sql/queries/*.sql`](sql/queries/overall_kpis.sql:1) files through the
 `QueryBackend` abstraction in [`src/dashboard/backend.py`](src/dashboard/backend.py:1),
 so no aggregation is reimplemented in Python. The two dialects differ in exactly
-two constructs — `UNIQUE NULLS NOT DISTINCT` and the `:name` bind markers — and
-[`to_duckdb_sql()`](src/dashboard/backend.py:139) translates them.
+two constructs, `UNIQUE NULLS NOT DISTINCT` and the `:name` bind markers, and
+[`to_duckdb_sql()`](src/dashboard/backend.py:129) translates them.
 
 The demo layer is built by [`scripts/build_demo_marts.py`](scripts/build_demo_marts.py:1),
-which runs the *entire* pipeline — raw load, staging, marts — inside a throwaway
+which runs the *entire* pipeline (raw load, staging, marts) inside a throwaway
 DuckDB database using the same SQL scripts and the same vectorized normalizers,
 then exports the result as Parquet. Before exporting, it asserts the figures
 match the ones in [`docs/methodology.md`](docs/methodology.md:1):
@@ -505,7 +527,7 @@ run by hand:
 | [`occupancy_by_listing.sql`](sql/queries/occupancy_by_listing.sql:1) | Occupancy per listing |
 | [`revenue_by_listing.sql`](sql/queries/revenue_by_listing.sql:1) | ADR, RevPAR, revenue per listing |
 | [`host_segmentation.sql`](sql/queries/host_segmentation.sql:1) | Occupancy, ADR and RevPAR by host portfolio size (single vs professional) |
-| [`top_listings_by_revpar.sql`](sql/queries/top_listings_by_revpar.sql:1) | Top listings by RevPAR per month (window ranking) |
+| [`top_listings_by_revpar.sql`](sql/queries/top_listings_by_revpar.sql:1) | Top listings by RevPAR per month (window ranking; takes a `:limit` bind marker) |
 | [`seasonality.sql`](sql/queries/seasonality.sql:1) | Occupancy collapsed by calendar month |
 | [`neighbourhood_ranking.sql`](sql/queries/neighbourhood_ranking.sql:1) | Neighbourhood leaderboard per year |
 | [`price_vs_occupancy.sql`](sql/queries/price_vs_occupancy.sql:1) | Price vs. occupancy by room type and month |
@@ -515,6 +537,15 @@ Run one directly:
 
 ```bash
 psql -h localhost -U airbnb -d airbnb -f sql/queries/seasonality.sql
+```
+
+Ten of the eleven files run through `psql` unchanged. `top_listings_by_revpar.sql`
+is the exception: it takes a `:limit` bind parameter, which `psql` does not
+substitute, so pass it explicitly:
+
+```bash
+psql -h localhost -U airbnb -d airbnb -v limit=20 \
+  -f sql/queries/top_listings_by_revpar.sql
 ```
 
 ### Ad-hoc examples
@@ -546,9 +577,13 @@ SELECT
     occupancy_rate
 FROM marts.revenue_by_listing
 WHERE month IS NOT NULL
-ORDER BY revpar DESC
+  AND revenue_per_available_night IS NOT NULL
+ORDER BY revpar DESC NULLS LAST
 LIMIT 20;
 ```
+
+The `NULLS LAST` clause matters: PostgreSQL sorts NULLs first on `DESC`, so
+without it the twenty rows you get back are the listings with no RevPAR at all.
 
 Overall occupancy trend:
 
@@ -591,6 +626,9 @@ ruff format src tests
 pyright
 ```
 
+CI runs `ruff check .`, `pyright` and `pytest` on every push, so keep the tree
+ruff-format clean before opening a pull request.
+
 > **Note:** `pandas==3.1.0` ships without a `py.typed` marker, so the
 > `pandas-stubs` package (installed with the `dev` extra) is required for
 > accurate type checking of pandas code.
@@ -606,8 +644,8 @@ pyright
 The repository ships one Inside Airbnb snapshot, committed as Parquet in
 `data/raw/`:
 
-- `listings.parquet` — Toronto listings, snapshot 2026-09-16, all 90 CSV columns
-- `calendar.parquet` — availability calendar for the same snapshot
+- `listings.parquet`: Toronto listings scraped 2026-09-16, all 90 CSV columns
+- `calendar.parquet`: availability calendar covering 2026-09-17 → 2027-09-17
 
 Source: [Inside Airbnb](https://insideairbnb.com/get-the-data) (Toronto,
 Canada). A copy of the same snapshot is on

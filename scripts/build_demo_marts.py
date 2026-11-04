@@ -182,9 +182,7 @@ def _insert_batches(
     return total
 
 
-def _materialize(
-    connection: duckdb.DuckDBPyConnection, config: AppConfig
-) -> None:
+def _materialize(connection: duckdb.DuckDBPyConnection, config: AppConfig) -> None:
     """Run the whole pipeline inside DuckDB, producing ``raw``/``staging``/``marts``."""
     for script in DDL_SCRIPTS:
         _run_script(connection, script)
@@ -233,6 +231,7 @@ def build_demo_layer(
     output: Path | None = None,
     *,
     force: bool = False,
+    verify: bool = True,
 ) -> Path:
     """Build the Parquet demo layer and return its directory.
 
@@ -245,12 +244,19 @@ def build_demo_layer(
     force:
         Rebuild even when the destination already holds a layer. Without it an
         existing layer is left alone, because the build is not incremental.
+    verify:
+        Check the materialised pipeline against the figures documented for the
+        bundled Toronto snapshot (:data:`EXPECTED`). Leave it on for the
+        committed snapshot; turn it off when building the demo layer from a
+        *different* city, whose headline figures are naturally different.
     """
     config = config or get_config()
     destination = output or config.dashboard.demo_path
 
     if destination.exists() and any(destination.glob("*.parquet")) and not force:
-        logger.info("%s already holds a demo layer; pass --force to rebuild", destination)
+        logger.info(
+            "%s already holds a demo layer; pass --force to rebuild", destination
+        )
         return destination
 
     destination.mkdir(parents=True, exist_ok=True)
@@ -268,12 +274,17 @@ def build_demo_layer(
             # the only moment the full raw/staging layers exist, and the night
             # total cannot be recovered from the narrowed export.
             measured = measure_pipeline(connection)
-            if not _matches(measured):
-                raise BuildError(
-                    "The DuckDB pipeline does not reproduce the documented "
-                    f"figures: {measured}"
+            if verify:
+                if not _matches(measured):
+                    raise BuildError(
+                        "The DuckDB pipeline does not reproduce the documented "
+                        f"figures: {measured}"
+                    )
+                logger.info("Pipeline figures verified: %s", _headline(measured))
+            else:
+                logger.warning(
+                    "Verification skipped; measured figures: %s", _headline(measured)
                 )
-            logger.info("Pipeline figures verified: %s", _headline(measured))
             _export_parquet(connection, destination)
         finally:
             connection.close()
@@ -288,9 +299,7 @@ def build_demo_layer(
 
 def _headline(measured: dict[str, object]) -> str:
     """One-line summary of the figures, for the build log."""
-    return ", ".join(
-        f"{key}={measured[key]}" for key in EXPECTED if key in measured
-    )
+    return ", ".join(f"{key}={measured[key]}" for key in EXPECTED if key in measured)
 
 
 def _matches(measured: dict[str, object]) -> bool:
@@ -327,7 +336,9 @@ def measure_pipeline(connection: duckdb.DuckDBPyConnection) -> dict[str, object]
     return {
         "calendar_nights": int(nights[0]) if nights else 0,
         "booked_nights": int(booked[0]) if booked else 0,
-        "occupancy_rate": round(float(occupancy[0]), 3) if occupancy and occupancy[0] else 0.0,
+        "occupancy_rate": round(float(occupancy[0]), 3)
+        if occupancy and occupancy[0]
+        else 0.0,
         "total_revenue": round(float(revenue[0])) if revenue and revenue[0] else 0,
     }
 
@@ -385,7 +396,9 @@ def verify_demo_layer(path: Path) -> dict[str, object]:
 
     return {
         "booked_nights": int(booked_nights[0]) if booked_nights else 0,
-        "occupancy_rate": round(float(occupancy[0]), 3) if occupancy and occupancy[0] else 0.0,
+        "occupancy_rate": round(float(occupancy[0]), 3)
+        if occupancy and occupancy[0]
+        else 0.0,
         "total_revenue": round(float(revenue[0])) if revenue and revenue[0] else 0,
         "listings_with_calendar": int(listings[0]) if listings else 0,
     }
@@ -412,6 +425,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Only verify an existing layer against the documented figures",
     )
+    parser.add_argument(
+        "--no-verify",
+        dest="no_verify",
+        action="store_true",
+        help=(
+            "Skip the check against the bundled Toronto figures while building. "
+            "Use it when the demo layer is built from a different city."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -434,7 +456,9 @@ def main(argv: list[str] | None = None) -> int:
             logger.info("Demo layer verified")
             return 0
 
-        build_demo_layer(config, args.output, force=args.force)
+        build_demo_layer(
+            config, args.output, force=args.force, verify=not args.no_verify
+        )
     except (BuildError, duckdb.Error) as exc:
         logger.error("Demo build failed: %s", exc)
         return 1

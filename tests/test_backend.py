@@ -161,9 +161,7 @@ def test_select_backend_auto_falls_back_to_duckdb(
 
     sentinel = object()
     monkeypatch.setattr(backend_module, "make_postgres_backend", unavailable)
-    monkeypatch.setattr(
-        backend_module, "make_duckdb_backend", lambda _config: sentinel
-    )
+    monkeypatch.setattr(backend_module, "make_duckdb_backend", lambda _config: sentinel)
 
     assert select_backend(config) is sentinel
 

@@ -41,6 +41,11 @@ pipeline:
   # Use COPY FROM STDIN for raw loads; set false to fall back to row-wise
   # INSERT ... ON CONFLICT (slower, but works without COPY privileges).
   use_copy: true
+  # A full run replaces the loaded snapshot: raw/staging/marts are truncated
+  # before the load, so rows missing from the new source (a removed listing, or
+  # a different city entirely) cannot survive the upsert and leak into the
+  # marts. Set false only for a deliberate incremental append.
+  replace_on_load: true
 
 logging:
   level: INFO

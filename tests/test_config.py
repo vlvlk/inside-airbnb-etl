@@ -31,6 +31,7 @@ ENV_ALIASES = (
     "VALIDATE_DATA",
     "SKIP_INVALID_ROWS",
     "USE_COPY",
+    "REPLACE_ON_LOAD",
     "LOG_LEVEL",
 )
 
@@ -289,6 +290,9 @@ class TestSectionsAreIndependent:
         assert pipeline.validate_data is True
         assert pipeline.skip_invalid_rows is False
         assert pipeline.use_copy is True
+        # A full run replaces the snapshot by default, so stale rows cannot
+        # survive an upsert and leak into the marts.
+        assert pipeline.replace_on_load is True
 
     def test_logging_defaults(self):
         logging_settings = LoggingSettings()

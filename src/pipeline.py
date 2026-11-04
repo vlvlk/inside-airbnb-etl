@@ -58,13 +58,26 @@ class ETLPipeline:
         logger.info("Transformations completed")
 
     def run_full_pipeline(self) -> None:
-        """Run the complete ETL pipeline."""
+        """Run the complete ETL pipeline.
+
+        A full run *replaces* the loaded snapshot: every layer is truncated
+        before the load, so rows missing from the new source (a removed listing,
+        or an entirely different city) cannot survive the upsert and leak into
+        the marts. Set ``pipeline.replace_on_load: false`` to append instead.
+        """
         logger.info("=" * 50)
         logger.info("Starting Inside Airbnb ETL Pipeline")
         logger.info("=" * 50)
 
         try:
             self.setup_database()
+            if self.config.pipeline.replace_on_load:
+                logger.info("Replacing previous snapshot: truncating all layers")
+                self.loader.truncate_all_layers()
+            else:
+                logger.info(
+                    "replace_on_load is off: appending to the existing snapshot"
+                )
             self.load_raw_data()
             self.transform_data()
 

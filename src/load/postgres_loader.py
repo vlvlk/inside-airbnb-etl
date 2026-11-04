@@ -292,6 +292,34 @@ class PostgresLoader:
             session.execute(text("TRUNCATE TABLE raw.calendar, raw.listings CASCADE"))
             logger.info("Truncated raw tables")
 
+    def truncate_all_layers(self) -> None:
+        """Truncate every layer so a full run replaces the previous snapshot.
+
+        The loader upserts on the natural key (``id`` for listings,
+        ``listing_id``/``date`` for calendar), which only *adds* rows: a listing
+        that disappeared from the source snapshot — or every listing of a
+        previous city — would otherwise stay in ``raw`` and keep flowing into
+        ``staging`` and ``marts``. Truncating all three layers first makes the
+        run a true replace, so the marts always describe exactly the configured
+        snapshot.
+
+        ``CASCADE`` is required because ``staging`` and ``marts`` reference the
+        raw tables through foreign-key-free joins but the calendar/listing
+        primary keys are still dependencies of the staging tables' own keys.
+        """
+        with self.session() as session:
+            session.execute(
+                text(
+                    "TRUNCATE TABLE "
+                    "raw.calendar, raw.listings, "
+                    "staging.calendar, staging.listings, "
+                    "marts.occupancy_by_listing, marts.occupancy_by_neighbourhood, "
+                    "marts.occupancy_by_room_type, marts.revenue_by_listing "
+                    "CASCADE"
+                )
+            )
+            logger.info("Truncated raw, staging and marts layers")
+
 
 def get_loader(config_path: Path | None = None) -> PostgresLoader:
     """Factory function to create a PostgresLoader."""
